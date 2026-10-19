@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .lbl { @apply block text-sm font-semibold text-slate-600 mb-1.5; }
+  .inp { @apply w-full h-14 rounded-xl border border-slate-300 bg-white px-4 text-lg text-slate-900 placeholder:text-slate-400
+                focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 lg:h-12 lg:text-base; }
+  .pick { @apply w-full min-h-[3.5rem] rounded-xl border border-slate-300 bg-white px-4 py-2 text-left flex items-center justify-between gap-3
+                 active:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 lg:min-h-[3rem]; }
+  .btn { @apply inline-flex items-center justify-center rounded-xl font-bold h-14 px-5 text-lg transition active:scale-[.99]
+                disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-900 hover:brightness-110 lg:h-12 lg:text-base; }
+  .btn-primary { @apply btn bg-slate-900 text-white; }
+  .btn-ghost { @apply btn bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 hover:brightness-100; }
+  .card { @apply bg-white rounded-2xl border border-slate-200; }
+  .chip { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold; }
+  /* desktop tables */
+  .tbl { @apply w-full text-sm; }
+  .tbl :where(th) { @apply px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500 bg-slate-50 border-b border-slate-200; }
+  .tbl :where(td) { @apply px-4 py-3 align-top; }
+  .tbl tbody tr { @apply border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 focus:outline-none focus-visible:bg-slate-100; }
+  /* report tables: no row click, tighter on print */
+  .rep tbody tr { @apply cursor-default hover:bg-transparent; }
+  .rep :where(th, td) { @apply print:px-2 print:py-1 print:text-xs; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+}
+/* hide number spinners: big thumbs, not tiny arrows */
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+@media print { @page { size: A4 landscape; margin: 12mm; } }
