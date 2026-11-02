@@ -4,12 +4,15 @@ const BURN_WARN_PCT = 5;        // warn when a closed challan loses more than th
 const AGING_WARN_DAYS = 180;    // amber after this many days with vendor
 const AGING_DANGER_DAYS = 300;  // red: close to the 1-year GST deemed-supply limit
 
+// Colour marks the kind of entry: gradient icon (tile), soft badge, save button.
+const ICON_IN = 'M12 3v11m0 0l-4-4m4 4l4-4M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3';
+const ICON_OUT = 'M12 14V3m0 0L8 7m4-4l4 4M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3';
 const TYPES = {
-  PURCHASE:   { label: 'Purchase In',   route: 'purchase',   badge: 'bg-emerald-100 text-emerald-800', btn: 'bg-emerald-600', tile: 'bg-emerald-600' },
-  LABOUR_OUT: { label: 'Labour Out',    route: 'labour-out', badge: 'bg-amber-100 text-amber-800',     btn: 'bg-amber-600',   tile: 'bg-amber-600' },
-  LABOUR_IN:  { label: 'Labour In',     route: 'labour-in',  badge: 'bg-sky-100 text-sky-800',         btn: 'bg-sky-600',     tile: 'bg-sky-600' },
-  SALE:       { label: 'Sale Out',      route: 'sale',       badge: 'bg-rose-100 text-rose-800',       btn: 'bg-rose-600',    tile: 'bg-rose-600' },
-  OPENING:    { label: 'Opening Stock', route: 'opening',    badge: 'bg-slate-200 text-slate-800',     btn: 'bg-slate-800',   tile: 'bg-slate-700' },
+  PURCHASE:   { label: 'Purchase In',   route: 'purchase',   hint: 'Bought from a party', icon: ICON_IN,  badge: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20', btn: 'bg-emerald-600 hover:bg-emerald-500 shadow-glow', tile: 'bg-gradient-to-b from-emerald-400 to-emerald-600' },
+  LABOUR_OUT: { label: 'Labour Out',    route: 'labour-out', hint: 'Sent to a vendor',    icon: ICON_OUT, badge: 'bg-amber-50 text-amber-700 ring-amber-600/25',       btn: 'bg-orange-600 hover:bg-orange-500 shadow-glow',     tile: 'bg-gradient-to-b from-amber-400 to-orange-500' },
+  LABOUR_IN:  { label: 'Labour In',     route: 'labour-in',  hint: 'Back from a vendor',  icon: ICON_IN,  badge: 'bg-blue-50 text-blue-700 ring-blue-600/20',          btn: 'bg-blue-600 hover:bg-blue-500 shadow-glow',       tile: 'bg-gradient-to-b from-sky-400 to-blue-600' },
+  SALE:       { label: 'Sale Out',      route: 'sale',       hint: 'Sold to a party',     icon: ICON_OUT, badge: 'bg-rose-50 text-rose-700 ring-rose-600/20',          btn: 'bg-rose-600 hover:bg-rose-500 shadow-glow',       tile: 'bg-gradient-to-b from-rose-400 to-rose-600' },
+  OPENING:    { label: 'Opening Stock', route: 'opening',    hint: 'Stock on day one',    icon: ICON_IN,  badge: 'bg-zinc-50 text-zinc-600 ring-zinc-500/20',          btn: 'bg-ink hover:bg-zinc-800 shadow-glow',            tile: 'bg-gradient-to-b from-zinc-400 to-zinc-600' },
 };
 const ROUTE_TYPE = Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [v.route, k]));
 const NAV = [
@@ -196,7 +199,7 @@ document.addEventListener('alpine:init', () => {
       return { home: 'Stock Ledger', stock: 'Stock', ledger: 'Ledger', entry: 'Entry', masters: 'Masters', reports: 'Reports' }[this.route] || '';
     },
     get isForm() { return !!ROUTE_TYPE[this.route]; },
-    get saveBtn() { const t = ROUTE_TYPE[this.route]; return t ? TYPES[t].btn : 'bg-slate-900'; },
+    get saveBtn() { const t = ROUTE_TYPE[this.route]; return t ? TYPES[t].btn : 'bg-ink hover:bg-zinc-800 shadow-glow'; },
 
     // ------------------------------------------------ lookups
     item(id) { return this.meta.items.find((i) => i.id === id) || null; },
@@ -359,9 +362,9 @@ document.addEventListener('alpine:init', () => {
       return { recv, sc, left, over: left < -0.0005, closes, burn, burnPct, warn: burnPct > BURN_WARN_PCT };
     },
     agingClass(days) {
-      if (days >= AGING_DANGER_DAYS) return 'bg-red-100 text-red-800';
-      if (days >= AGING_WARN_DAYS) return 'bg-amber-100 text-amber-800';
-      return 'bg-slate-100 text-slate-700';
+      if (days >= AGING_DANGER_DAYS) return 'bg-rose-50 text-rose-700 ring-rose-600/20';
+      if (days >= AGING_WARN_DAYS) return 'bg-amber-50 text-amber-700 ring-amber-600/25';
+      return 'bg-zinc-50 text-zinc-600 ring-zinc-500/20';
     },
 
     // ------------------------------------------------ save
