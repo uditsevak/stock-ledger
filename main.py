@@ -188,23 +188,32 @@ def _is(col, val):
     return col.is_(None) if val is None else col == val
 
 
-def item_label(mat: Material, shape: Optional[Shape], grade: Optional[Grade], size: str) -> str:
+STAGE_NAMES = {ItemType.RAW: "Raw", ItemType.FG: "Finished"}
+
+
+def item_label(mat: Material, shape: Optional[Shape], grade: Optional[Grade], size: str, typ: str) -> str:
     head = f"{mat.name} {shape.name}" if shape else mat.name
-    return " · ".join([head] + [x for x in (grade.name if grade else "", size) if x])
+    name = " · ".join([head] + [x for x in (grade.name if grade else "", size) if x])
+    return f"{name} ({STAGE_NAMES[typ]})" if typ in STAGE_NAMES else name
 
 
 def item_spec(it: Item) -> dict:
-    return {"material_id": it.material_id, "shape_id": it.shape_id, "grade_id": it.grade_id, "size": it.size}
+    return {"material_id": it.material_id, "shape_id": it.shape_id, "grade_id": it.grade_id, "size": it.size,
+            "stage": it.type if it.type in ItemType.STAGES else None}
 
 
 def resolve_item(s: Session, sp, what="material") -> Item:
-    """Find the stock line for Material + Type + Grade + Size, or make it. Scrap is material only."""
+    """Find the stock line for Stage + Material + Type + Grade + Size, or make it. Scrap is material only."""
     mat = s.get(Material, sp.material_id) if sp and sp.material_id else None
     if not mat:
         bad(f"Select {what}.")
     shape = grade = None
     size = key = ""
+    typ = ItemType.SCRAP
     if not mat.is_scrap:
+        typ = sp.stage
+        if typ not in ItemType.STAGES:
+            bad(f"Select Raw or Finished for {mat.name}.")
         shape = s.get(Shape, sp.shape_id) if sp.shape_id else None
         if not shape:
             bad(f"Select type (tube, rod, sheet or strip) for {mat.name}.")
@@ -215,11 +224,11 @@ def resolve_item(s: Session, sp, what="material") -> Item:
             bad(f"Select {mat.name} grade.")
         size, key = clean_size(sp.size)
     it = s.exec(select(Item).where(Item.material_id == mat.id, _is(Item.shape_id, shape and shape.id),
-                                   _is(Item.grade_id, grade and grade.id), Item.size_key == key)).first()
+                                   _is(Item.grade_id, grade and grade.id), Item.size_key == key,
+                                   Item.type == typ)).first()
     if not it:
         it = Item(material_id=mat.id, shape_id=shape and shape.id, grade_id=grade and grade.id,
-                  size=size, size_key=key, name=item_label(mat, shape, grade, size),
-                  type=ItemType.SCRAP if mat.is_scrap else ItemType.RAW)
+                  size=size, size_key=key, type=typ, name=item_label(mat, shape, grade, size, typ))
         s.add(it)
         s.flush()
     return it
@@ -229,12 +238,31 @@ def refresh_item_names(s: Session):
     """After a material, type or grade is renamed, so stock lines show the new name."""
     mats, shapes, grades = ({r.id: r for r in s.exec(select(t)).all()} for t in (Material, Shape, Grade))
     for it in s.exec(select(Item)).all():
-        mat = mats[it.material_id]
-        name = item_label(mat, shapes.get(it.shape_id), grades.get(it.grade_id), it.size)
-        typ = ItemType.SCRAP if mat.is_scrap else ItemType.RAW
-        if (it.name, it.type) != (name, typ):
-            it.name, it.type = name, typ
+        name = item_label(mats[it.material_id], shapes.get(it.shape_id), grades.get(it.grade_id), it.size, it.type)
+        if it.name != name:
+            it.name = name
             s.add(it)
+
+
+def move_received_to_finished(s: Session):
+    """Before Raw/Finished existed, Labour In put metal back into the same (raw) line it was sent from.
+    Move those receipts to the Finished line, so raw and processed stock are counted apart. Runs at startup;
+    does nothing once done."""
+    old = s.exec(select(Movement, Item).join(Item, Item.id == Movement.item_id)
+                 .where(Movement.role == "RECV", Item.type == ItemType.RAW)).all()
+    for mv, it in old:
+        fg = s.exec(select(Item).where(Item.material_id == it.material_id, _is(Item.shape_id, it.shape_id),
+                                       _is(Item.grade_id, it.grade_id), Item.size_key == it.size_key,
+                                       Item.type == ItemType.FG)).first()
+        if not fg:
+            fg = Item(material_id=it.material_id, shape_id=it.shape_id, grade_id=it.grade_id, size=it.size,
+                      size_key=it.size_key, type=ItemType.FG, name="")
+            s.add(fg)
+            s.flush()
+        mv.item_id = fg.id
+        s.add(mv)
+    refresh_item_names(s)
+    s.commit()
 
 
 def get_party(s: Session, party_id: Optional[int]) -> Party:
@@ -386,7 +414,8 @@ PASSWORD = PField(max_length=128)
 
 
 class Spec(BaseModel):
-    """What the material is. Type, grade and size are ignored for scrap."""
+    """What the material is. Stage, type, grade and size are ignored for scrap."""
+    stage: Optional[str] = None  # RAW / FG (Finished)
     material_id: Optional[int] = None
     shape_id: Optional[int] = None
     grade_id: Optional[int] = None
@@ -429,7 +458,7 @@ class LabourOutBody(BaseModel):
 class LabourInBody(BaseModel):
     date: Date
     lot_id: int
-    recv: Optional[Spec] = None  # metal that came back
+    recv: Optional[Spec] = None  # metal that came back; always booked as Finished
     recv_qty: float = PField(default=0, ge=0)
     scrap_material_id: Optional[int] = None
     scrap_qty: float = PField(default=0, ge=0)
@@ -550,7 +579,10 @@ def write_labour_in(s: Session, b: LabourInBody) -> Entry:
     recv_qty, scrap_qty = q3(b.recv_qty), q3(b.scrap_qty)
     if recv_qty <= 0 and scrap_qty <= 0 and not b.close:
         bad("Enter received or scrap quantity.")
-    recv_item = resolve_item(s, b.recv, "the material received") if recv_qty > 0 else None
+    recv_item = None
+    if recv_qty > 0:
+        recv = Spec(**{**(b.recv.model_dump() if b.recv else {}), "stage": ItemType.FG})
+        recv_item = resolve_item(s, recv, "the material received")
     scrap_item = None
     if scrap_qty > 0:
         mat = s.get(Material, b.scrap_material_id) if b.scrap_material_id else None
@@ -786,7 +818,7 @@ def item_rows(s: Session) -> list:
     rows = [{"id": i.id, "name": i.name, "type": i.type, "unit": i.unit, **item_spec(i), "size_key": i.size_key,
              "stock": stock.get(i.id, 0.0), "used": i.id in stock}
             for i in s.exec(select(Item)).all()]
-    return sorted(rows, key=lambda r: (r["type"] == ItemType.SCRAP, r["material_id"], r["shape_id"] or 0,
+    return sorted(rows, key=lambda r: (ItemType.ALL.index(r["type"]), r["material_id"], r["shape_id"] or 0,
                                        r["grade_id"] or 0, r["size_key"]))
 
 
@@ -1138,7 +1170,8 @@ def report_reconciliation(date_from: date, date_to: date, s: Session = Depends(g
     mats, shapes, grades = ({r.id: r.name for r in s.exec(select(t)).all()} for t in (Material, Shape, Grade))
     for it in item_rows(s):
         d = during.get(it["id"], {})
-        r = {"item": it["name"], "material": mats[it["material_id"]], "shape": shapes.get(it["shape_id"], ""),
+        r = {"item": it["name"], "stage": STAGE_NAMES.get(it["type"], "Scrap"),
+             "material": mats[it["material_id"]], "shape": shapes.get(it["shape_id"], ""),
              "grade": grades.get(it["grade_id"], ""), "size": it["size"], "unit": it["unit"],
              "opening": q3(before.get(it["id"], 0.0)),
              "purchase": q3(d.get(EntryType.PURCHASE, 0.0)),
@@ -1150,7 +1183,7 @@ def report_reconciliation(date_from: date, date_to: date, s: Session = Depends(g
                           - r["job_out"] - r["sale"])
         if any(abs(r[f]) > EPS for f in fields):
             rows.append(r)
-    cols = [["material", "Material", ""], ["shape", "Type", ""], ["grade", "Grade", ""], ["size", "Size", ""],
+    cols = [["stage", "Stage", ""], ["material", "Material", ""], ["shape", "Type", ""], ["grade", "Grade", ""], ["size", "Size", ""],
             ["unit", "Unit", ""],
             ["opening", "Opening", "num"], ["purchase", "Purchased", "num"],
             ["opening_entry", "Opening entry", "num"], ["job_out", "Job work out", "num"],
@@ -1309,6 +1342,7 @@ def init_db():
                 conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
     with Session(engine) as s:
         seed(s)
+        move_received_to_finished(s)
     daily_auto_backup()
 
 

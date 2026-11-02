@@ -49,7 +49,8 @@ def test_full_flow():
     n0, all0 = len(ok(c.get("/api/entries"))), len(ok(c.get("/api/entries?include_deleted=true")))
     _, mat, shape, grade = masters()
     brass, copper, b_scrap = mat["Brass"], mat["Copper"], mat["Brass Scrap"]
-    rod = {"material_id": brass, "shape_id": shape["Rod"], "grade_id": grade[(brass, "63/37")], "size": "12 mm"}
+    rod = {"stage": "RAW", "material_id": brass, "shape_id": shape["Rod"], "grade_id": grade[(brass, "63/37")],
+           "size": "12 mm"}
     shreya = ok(c.get("/api/meta"))["vendors"][0]["id"]
     party = ok(c.post("/api/parties", json={"name": "Party A"}))
     err(c.post("/api/parties", json={"name": "party a"}), "already exists")
@@ -57,6 +58,7 @@ def test_full_flow():
 
     # what a stock line needs
     err(c.post("/api/entries/purchase", json={**P, "spec": {}, "qty": 1}), "select material")
+    err(c.post("/api/entries/purchase", json={**P, "spec": {**rod, "stage": None}, "qty": 1}), "raw or finished")
     err(c.post("/api/entries/purchase", json={**P, "spec": {**rod, "shape_id": None}, "qty": 1}), "select type")
     err(c.post("/api/entries/purchase", json={**P, "spec": {**rod, "grade_id": None}, "qty": 1}), "select brass grade")
     err(c.post("/api/entries/purchase", json={**P, "spec": {**rod, "grade_id": grade[(copper, "DHP")]}, "qty": 1}),
@@ -64,7 +66,7 @@ def test_full_flow():
 
     # Purchase 200 of Brass Rod 63/37 12 mm, with bill no. and HSN
     pur = ok(c.post("/api/entries/purchase", json={**P, "spec": rod, "qty": 200, "ref_no": "B-1", "hsn": "74072120"}))
-    line = "Brass Rod · 63/37 · 12 mm"
+    line = "Brass Rod · 63/37 · 12 mm (Raw)"
     assert pur["lines"][0]["item_name"] == line and pur["hsn"] == "74072120"
     assert stock(line) == 200
     assert len(ok(c.get("/api/entries?q=74072120"))) == 1  # HSN is searchable
@@ -89,7 +91,8 @@ def test_full_flow():
     lot = ok(c.get(f"/api/lots?vendor_id={shreya}"))[0]
     assert lot["pending"] == 200 and lot["spec"]["grade_id"] == rod["grade_id"] and lot["material_name"] == "Brass"
 
-    # Labour in: rod comes back drawn to 10 mm, plus brass scrap. Partial, then close -> 180 / 10 / 10 burn
+    # Labour in: rod comes back drawn to 10 mm (always booked as Finished), plus brass scrap.
+    # Partial, then close -> 180 / 10 / 10 burn
     back = {**rod, "size": "10 mm"}
     LI = {"date": TODAY, "lot_id": lot["id"]}
     err(c.post("/api/entries/labour-in", json={**LI, "recv": back, "recv_qty": 1, "scrap_material_id": brass,
@@ -104,11 +107,11 @@ def test_full_flow():
     closed = ok(c.get("/api/lots?status=CLOSED"))[0]
     assert (closed["recv_in"], closed["scrap_in"], closed["burn"], closed["burn_pct"]) == (180, 10, 10, 5.0)
     assert ok(c.get("/api/lots")) == []
-    rod10 = "Brass Rod · 63/37 · 10 mm"
+    rod10 = "Brass Rod · 63/37 · 10 mm (Finished)"
     assert stock(rod10) == 180 and stock("Brass Scrap") == 10
 
     # Sales
-    sell = {**P, "spec": back, "qty": 50}
+    sell = {**P, "spec": {**back, "stage": "FG"}, "qty": 50}
     sale = ok(c.post("/api/entries/sale", json=sell))
     assert stock(rod10) == 130
     err(c.post("/api/entries/sale", json={**sell, "qty": 131}), "not enough stock")
@@ -139,13 +142,13 @@ def test_full_flow():
     assert stock(rod10) == 60
 
     # Opening stock (scrap: type/grade/size ignored) + material already with vendor at go-live
-    cu_sheet = {"material_id": copper, "shape_id": shape["Sheet"], "grade_id": grade[(copper, "ETP")], "size": "1.5 x 600"}
+    cu_sheet = {"stage": "RAW", "material_id": copper, "shape_id": shape["Sheet"], "grade_id": grade[(copper, "ETP")], "size": "1.5 x 600"}
     ok(c.post("/api/entries/opening", json={"date": TODAY, "spec": cu_sheet, "qty": 75.5}))
     op = ok(c.post("/api/entries/opening", json={"date": TODAY, "spec": {**rod, "material_id": b_scrap}, "qty": 3}))
     assert op["lines"][0]["item_name"] == "Brass Scrap"
     ok(c.post("/api/entries/labour-out", json={"date": TODAY, "vendor_id": shreya, "spec": cu_sheet, "qty": 30,
                                                 "is_opening": True, "challan_no": "OLD-7"}))
-    assert stock("Copper Sheet · ETP · 1.5 x 600") == 75.5
+    assert stock("Copper Sheet · ETP · 1.5 x 600 (Raw)") == 75.5
     err(c.post("/api/entries/labour-out", json={"date": TODAY, "vendor_id": shreya, "spec": cu_sheet, "qty": 1,
                                                  "challan_no": "old-7"}), "already used")
     assert ok(c.get("/api/labour/next-challan"))["challan_no"] == "LO-0002"
@@ -180,26 +183,80 @@ def test_masters():
     ok(c.post("/api/grades", json={"name": "Mst 60/40", "material_id": mat["Copper"]}))  # same name, other metal: fine
     hollow = ok(c.post("/api/shapes", json={"name": "Mst Hollow"}))
     err(c.post("/api/shapes", json={"name": "tube"}), "already exists")
-    spec = {"material_id": brass, "shape_id": hollow["id"], "grade_id": g["id"], "size": "Mst-1"}
+    spec = {"stage": "FG", "material_id": brass, "shape_id": hollow["id"], "grade_id": g["id"], "size": "Mst-1"}
     ok(c.post("/api/entries/opening", json={"date": TODAY, "spec": spec, "qty": 5}))
-    assert stock("Brass Mst Hollow · Mst 60/40 · Mst-1") == 5
+    assert stock("Brass Mst Hollow · Mst 60/40 · Mst-1 (Finished)") == 5
 
     # renaming a master renames its stock lines
     ok(c.put(f"/api/grades/{g['id']}", json={"name": "Mst 61/39", "material_id": brass}))
-    assert stock("Brass Mst Hollow · Mst 61/39 · Mst-1") == 5
+    assert stock("Brass Mst Hollow · Mst 61/39 · Mst-1 (Finished)") == 5
     # used masters can't change what they are
     err(c.put(f"/api/grades/{g['id']}", json={"name": "Mst 61/39", "material_id": mat["Copper"]}), "already used")
     err(c.put(f"/api/materials/{brass}", json={"name": "Brass", "is_scrap": True}), "already used")
     # a new metal with no grades needs no grade
     zinc = ok(c.post("/api/materials", json={"name": "Mst Zinc"}))
     err(c.post("/api/materials", json={"name": "mst zinc"}), "already exists")
-    ok(c.post("/api/entries/opening", json={"date": TODAY, "spec": {"material_id": zinc["id"], "shape_id": hollow["id"]},
-                                            "qty": 1}))
-    assert stock("Mst Zinc Mst Hollow") == 1
+    ok(c.post("/api/entries/opening", json={"date": TODAY, "spec": {"stage": "RAW", "material_id": zinc["id"],
+                                                                         "shape_id": hollow["id"]}, "qty": 1}))
+    assert stock("Mst Zinc Mst Hollow (Raw)") == 1
     # hiding keeps it in the list (frontend hides inactive ones from pickers)
     ok(c.put(f"/api/shapes/{hollow['id']}", json={"name": "Mst Hollow", "active": False}))
     assert next(s for s in ok(c.get("/api/meta"))["shapes"] if s["id"] == hollow["id"])["active"] is False
     ok(c.post("/api/vendors", json={"name": "D"}))
+
+
+def test_raw_and_finished_are_separate_stock():
+    """1000 bought, 500 sent for labour, 480 back + 10 scrap: only the 480 is finished and sellable."""
+    _, mat, shape, grade = masters()
+    brass = mat["Brass"]
+    tube = {"stage": "RAW", "material_id": brass, "shape_id": shape["Tube"], "grade_id": grade[(brass, "70/30")],
+            "size": "Stg 40 x 48m"}
+    party = ok(c.post("/api/parties", json={"name": "Stg Party"}))["id"]
+    vendor = ok(c.post("/api/vendors", json={"name": "Stg Vendor"}))["id"]
+    ok(c.post("/api/entries/purchase", json={"date": TODAY, "spec": tube, "party_id": party, "qty": 1000}))
+    lo = ok(c.post("/api/entries/labour-out", json={"date": TODAY, "vendor_id": vendor, "spec": tube, "qty": 500}))
+    li = ok(c.post("/api/entries/labour-in", json={"date": TODAY, "lot_id": lo["lot_id"], "recv": tube, "recv_qty": 480,
+                                                    "scrap_material_id": mat["Brass Scrap"], "scrap_qty": 10,
+                                                    "close": True}))
+    assert li["burn"] == 10
+    raw, fg = "Brass Tube · 70/30 · Stg 40 x 48m (Raw)", "Brass Tube · 70/30 · Stg 40 x 48m (Finished)"
+    assert (stock(raw), stock(fg)) == (500, 480)
+    sale = {"date": TODAY, "party_id": party, "spec": {**tube, "stage": "FG"}}
+    err(c.post("/api/entries/sale", json={**sale, "qty": 481}), "not enough stock")
+    ok(c.post("/api/entries/sale", json={**sale, "qty": 480}))
+    ok(c.post("/api/entries/sale", json={**sale, "spec": tube, "qty": 100}))  # raw can be sold too (trading)
+    # finished can go out for labour again
+    ok(c.post("/api/entries/opening", json={"date": TODAY, "spec": {**tube, "stage": "FG"}, "qty": 50}))
+    ok(c.post("/api/entries/labour-out", json={"date": TODAY, "vendor_id": vendor, "spec": {**tube, "stage": "FG"},
+                                                "qty": 50}))
+    assert (stock(raw), stock(fg)) == (400, 0)
+
+
+def test_old_receipts_move_to_finished():
+    """Labour In entries made before Raw/Finished landed in the raw line; startup moves them."""
+    _, mat, shape, grade = masters()
+    brass = mat["Brass"]
+    tube = {"stage": "RAW", "material_id": brass, "shape_id": shape["Tube"], "grade_id": grade[(brass, "70/30")],
+            "size": "Mig 1"}
+    party = ok(c.post("/api/parties", json={"name": "Mig Party"}))["id"]
+    vendor = ok(c.post("/api/vendors", json={"name": "Mig Vendor"}))["id"]
+    pur = ok(c.post("/api/entries/purchase", json={"date": TODAY, "spec": tube, "party_id": party, "qty": 1000}))
+    lo = ok(c.post("/api/entries/labour-out", json={"date": TODAY, "vendor_id": vendor, "spec": tube, "qty": 500}))
+    li = ok(c.post("/api/entries/labour-in", json={"date": TODAY, "lot_id": lo["lot_id"], "recv": tube, "recv_qty": 480}))
+    raw_id = pur["lines"][0]["item_id"]
+    with main.Session(main.engine) as s:  # make it look like the old version booked it
+        mv = s.exec(main.select(main.Movement).where(main.Movement.entry_id == li["id"])).one()
+        mv.item_id = raw_id
+        s.add(mv)
+        s.commit()
+    raw, fg = "Brass Tube · 70/30 · Mig 1 (Raw)", "Brass Tube · 70/30 · Mig 1 (Finished)"
+    assert (stock(raw), stock(fg)) == (980, 0)
+    with main.Session(main.engine) as s:
+        main.move_received_to_finished(s)
+    assert (stock(raw), stock(fg)) == (500, 480)
+    with main.Session(main.engine) as s:
+        main.move_received_to_finished(s)  # second run: nothing to do
+    assert (stock(raw), stock(fg)) == (500, 480)
 
 
 def test_old_flat_item_db_is_reset(tmp_path, monkeypatch):

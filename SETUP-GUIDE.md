@@ -71,13 +71,13 @@ The app starts with the client's materials (Brass, Copper, Cu/Ni and their scrap
 | # | Show | Where | What to point out |
 |---|---|---|---|
 | 1 | Users | **Masters → Users → + Add** | Add "Ramesh" as **Viewer**. Editors change data, viewers only look. |
-| 2 | Opening stock | **Home → Opening Stock entry** | Brass → Rod → 63/37 → size 12 mm, 1000 kg. Go-live balances. Tap Copper: **only copper grades show**. |
+| 2 | Opening stock | **Home → Opening Stock entry** | Brass → Raw → Rod → 63/37 → size 12 mm, 1000 kg. Go-live balances. Tap Copper: **only copper grades show**. |
 | 3 | Purchase | **Purchase In** | Party (add a new one right from the picker), Brass Rod 63/37, size 12 mm (tap the chip), qty 500, bill no., HSN. |
 | 4 | Labour Out | **Labour Out** | Vendor Shreya Alloy, **Pick from stock list** → Brass Rod 63/37 12 mm, 600 kg. **Challan no. LO-0001 is automatic.** Stock drops. |
-| 5 | Labour In, part | **Labour In → Shreya Alloy → LO-0001** | Material received is pre-filled; change size to 10 mm, 300 kg. "Still pending 300 kg." |
+| 5 | Labour In, part | **Labour In → Shreya Alloy → LO-0001** | Material received is pre-filled; change size to 10 mm, 300 kg. It goes into **Finished** stock. "Still pending 300 kg." |
 | 6 | Labour In, close | Same challan again | Received 270, Brass Scrap 20, tick **"This challan is complete"**. The app shows **burn 10 kg (1.67%)**. Above 5% it warns. |
-| 7 | Sale | **Sale Out** | Try to sell more than stock: **it refuses** with a clear message. Then a valid sale. |
-| 8 | Stock | **Stock** | Metal / Scrap / With vendors tabs. Each size is its own line. Tap one to see its full history. |
+| 7 | Sale | **Sale Out** | Only **Finished** stock is offered (raw stays for processing). Try to sell more than stock: **it refuses** with a clear message. Then a valid sale. |
+| 8 | Stock | **Stock** | Raw / Finished / Scrap / Vendors tabs. Each size is its own line. Tap one to see its full history. |
 | 9 | Ledger | **Ledger** | Filters by type, date and search. Open an entry: **who** created or edited it, and when. Edit and delete are logged. |
 | 10 | Reports | **Reports** | Stock reconciliation, vendor pending + aging, burn %. **Export CSV** opens in Excel; **Print / Save PDF**. |
 | 11 | Viewer | Log out (bottom of sidebar, or tap your name on a phone) → log in as Ramesh | No entry buttons, no edit or delete. Read-only. |

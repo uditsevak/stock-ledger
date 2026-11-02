@@ -21,8 +21,8 @@ def test_reports():
     scrap_mat = ok(c.post("/api/materials", json={"name": "Rpt Scrap", "is_scrap": True}))["id"]
     grade = ok(c.post("/api/grades", json={"name": "R1", "material_id": metal}))["id"]
     tube = next(x["id"] for x in ok(c.get("/api/meta"))["shapes"] if x["name"] == "Tube")
-    raw = {"material_id": metal, "shape_id": tube, "grade_id": grade, "size": "20 mm"}
-    drawn = {**raw, "size": "18 mm"}  # what comes back from the vendor
+    raw = {"stage": "RAW", "material_id": metal, "shape_id": tube, "grade_id": grade, "size": "20 mm"}
+    drawn = {**raw, "stage": "FG", "size": "18 mm"}  # what comes back from the vendor
     party = ok(c.post("/api/parties", json={"name": "Rpt Party"}))["id"]
     assert c.post("/api/vendors", json={"name": "Bad GST", "gstin": "XX123"}).status_code == 400
     vendor = ok(c.post("/api/vendors", json={"name": "Rpt Vendor", "gstin": "27abcde1234f1z5"}))
@@ -38,10 +38,11 @@ def test_reports():
     # reconciliation: opening + in - out = closing, and closing today = live stock
     rec = table(ok(c.get(f"/api/reports/reconciliation?date_from={day(8)}&date_to={day(0)}")), "reconciliation")
     row = {r["item"]: r for r in rec["rows"]}
-    R20, R18 = "Rpt Metal Tube · R1 · 20 mm", "Rpt Metal Tube · R1 · 18 mm"
+    R20, R18 = "Rpt Metal Tube · R1 · 20 mm (Raw)", "Rpt Metal Tube · R1 · 18 mm (Finished)"
     assert (row[R20]["opening"], row[R20]["job_out"], row[R20]["closing"]) == (1000, 800, 200)
     assert (row[R18]["job_in"], row[R18]["sale"], row[R18]["closing"]) == (500, 100, 400)
-    assert (row[R18]["material"], row[R18]["shape"], row[R18]["grade"], row[R18]["size"]) == ("Rpt Metal", "Tube", "R1", "18 mm")
+    assert (row[R18]["stage"], row[R18]["material"], row[R18]["shape"], row[R18]["grade"], row[R18]["size"]) == \
+        ("Finished", "Rpt Metal", "Tube", "R1", "18 mm")
     assert row["Rpt Scrap"]["closing"] == 70 and row["Rpt Scrap"]["shape"] == ""
     live = {i["name"]: i["stock"] for i in ok(c.get("/api/stock"))["items"]}
     assert all(r["closing"] == live[r["item"]] for r in rec["rows"] if r["item"].startswith("Rpt"))

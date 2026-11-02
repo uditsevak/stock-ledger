@@ -23,12 +23,23 @@ Give the PC a fixed IP in the router so the phone link never changes.
 Every entry picks its material the same way, with big buttons:
 
 1. **Material**: Brass, Copper, Cu/Ni, Brass Scrap, Copper Scrap, Cu/Ni Scrap
-2. **Type**: Tube, Rod, Sheet, Strip
-3. **Grade**: only the grades of the chosen material (Brass 63/37, 70/30…; Copper DHP, ETP…; Cu/Ni 90/10…)
-4. **Size**: typed (e.g. `12 mm`, `25 x 3`). Sizes used before show as tap-to-reuse chips.
+2. **Stage**: Raw or Finished. Each screen picks the usual one, so staff rarely touch it (see below)
+3. **Type**: Tube, Rod, Sheet, Strip
+4. **Grade**: only the grades of the chosen material (Brass 63/37, 70/30…; Copper DHP, ETP…; Cu/Ni 90/10…)
+5. **Size**: typed (e.g. `12 mm`, `25 x 3`). Sizes used before show as tap-to-reuse chips.
 
-Scrap is material only: no type, grade or size. Each Material + Type + Grade + Size is its own stock line, made the
-first time an entry uses it. Size is matched loosely (`12 MM` = `12mm` = `12 mm`), so typing it a little differently
+Scrap is material only: no stage, type, grade or size. Each Stage + Material + Type + Grade + Size is its own stock
+line, made the first time an entry uses it. So raw tube and the same tube back from labour are counted apart: buy 1000,
+send 500, get 480 back, and stock is Raw 500 + Finished 480. Only the 480 is offered on Sale Out.
+
+| Screen | Stage it uses |
+|---|---|
+| Purchase In | Raw (switch to Finished for bought-in finished material) |
+| Labour Out | takes from Raw (switch to Finished to process it again) |
+| Labour In | received metal always goes into Finished |
+| Sale Out | takes from Finished (switch to Raw to sell raw as it is) |
+| Opening Stock | no default: pick Raw or Finished |
+ Size is matched loosely (`12 MM` = `12mm` = `12 mm`), so typing it a little differently
 doesn't split the stock. **HSN** is typed on each entry (optional).
 
 | Screen | What it does |
@@ -38,7 +49,7 @@ doesn't split the stock. **HSN** is typed on each entry (optional).
 | Labour In | Vendor → open challan → material received (pre-filled with what was sent; change the size if it was drawn down) + qty, and scrap + qty. Partial receipts allowed. Tick "complete" to close the challan; what's left is **burning loss** (auto-calculated, warns above 5%). |
 | Sale Out | Party + material/type/grade/size + qty, invoice no., HSN. Shows only sizes in stock; "Pick from stock list" fills all four at once. Can't sell more than stock. |
 | Opening Stock | Go-live balances. For material already lying with a vendor, use Labour Out with "Already with vendor" ticked. |
-| Stock | Metal / Scrap / With vendors (with days-out aging). Tap a line to see its ledger. |
+| Stock | Raw / Finished / Scrap / Vendors (with days-out aging). Tap a line to see its ledger. |
 | Ledger | Every entry with filters. Tap → detail → Edit / Delete. Every create/edit/delete is logged. |
 | Masters | Materials (tick "scrap"), Types, Grades (each belongs to one material), parties, vendors. Renaming updates every stock line. Deactivate instead of delete. Backup download. |
 
@@ -90,7 +101,7 @@ tests/            .venv/bin/pip install pytest httpx   then   .venv/bin/python -
 
 | Report | What it shows |
 |---|---|
-| Stock reconciliation | For a period, per material/type/grade/size: opening + purchased + opening entries + job work in − job work out − sold = closing. Closing for a period ending today matches the Stock screen. |
+| Stock reconciliation | For a period, per stage/material/type/grade/size: opening + purchased + opening entries + job work in − job work out − sold = closing. Closing for a period ending today matches the Stock screen. |
 | Vendor pending & aging | Open challans right now, and pending kg per vendor in 0–90 / 91–180 / 181–365 / over-1-year buckets (GST treats job work goods not back within 1 year as supplied). |
 | Burn % | Challans closed in a period: sent, received, scrap, burn and burn %, by vendor, by material and per challan. Above 5% is highlighted. |
 

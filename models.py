@@ -1,7 +1,8 @@
 """Database tables.
 
-A stock line (`Item`) is one Material + Type + Grade + Size, created the first
-time an entry uses it. Scrap materials have no type, grade or size.
+A stock line (`Item`) is one Stage (Raw / Finished) + Material + Type + Grade +
+Size, created the first time an entry uses it. Scrap materials have no stage,
+type, grade or size.
 
 Stock is never stored. It is always SUM(movement.qty) over non-deleted entries,
 so the numbers can't drift. Every entry (purchase, sale, labour out/in, opening)
@@ -15,9 +16,12 @@ from sqlmodel import Field, SQLModel
 
 
 class ItemType:
-    RAW = "RAW"      # metal (Brass, Copper, Cu/Ni)
+    """The stage of a stock line. Raw and Finished of the same metal/type/grade/size are separate stock."""
+    RAW = "RAW"      # bought, or not yet processed
+    FG = "FG"        # Finished: came back from labour (or bought/opened as finished)
     SCRAP = "SCRAP"  # material marked is_scrap
-    ALL = (RAW, SCRAP)
+    ALL = (RAW, FG, SCRAP)
+    STAGES = (RAW, FG)
 
 
 class EntryType:
@@ -75,8 +79,8 @@ class Item(SQLModel, table=True):
     grade_id: Optional[int] = Field(default=None, foreign_key="grade.id")
     size: str = ""  # as first typed, e.g. "12 mm"
     size_key: str = ""  # for matching: lower case, no spaces ("12mm")
-    name: str = Field(index=True)  # "Brass Rod · 63/37 · 12 mm", rebuilt when a master is renamed
-    type: str = ItemType.RAW  # RAW / SCRAP, follows the material
+    name: str = Field(index=True)  # "Brass Rod · 63/37 · 12 mm (Raw)", rebuilt when a master is renamed
+    type: str = ItemType.RAW  # stage RAW / FG; SCRAP for scrap materials. Part of what makes a line unique
     unit: str = "kg"
 
 
