@@ -27,8 +27,8 @@ from starlette.background import BackgroundTask
 from sqlalchemy import delete, event, func
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from models import (AuditLog, Entry, EntryType, Item, ItemType, LabourLot, LoginSession,
-                    LotStatus, Movement, Party, Role, User, Vendor, now)
+from models import (AuditLog, Entry, EntryType, Grade, Item, ItemType, LabourLot, LoginSession,
+                    LotStatus, Material, Movement, Party, Role, Shape, User, Vendor, now)
 from seed import seed
 
 BASE = Path(__file__).resolve().parent
@@ -178,11 +178,63 @@ def check_date(d: date):
         bad("Date can't be in the future.")
 
 
-def get_item(s: Session, item_id: Optional[int], label="Material") -> Item:
-    it = s.get(Item, item_id) if item_id else None
+def clean_size(raw: str) -> tuple:
+    """("12 mm", "12mm"): what to show, and what to match on so "12 MM" and "12mm" are one line."""
+    show = " ".join((raw or "").split())
+    return show, re.sub(r"\s+", "", show.lower()).replace("×", "x").replace("*", "x")
+
+
+def _is(col, val):
+    return col.is_(None) if val is None else col == val
+
+
+def item_label(mat: Material, shape: Optional[Shape], grade: Optional[Grade], size: str) -> str:
+    head = f"{mat.name} {shape.name}" if shape else mat.name
+    return " · ".join([head] + [x for x in (grade.name if grade else "", size) if x])
+
+
+def item_spec(it: Item) -> dict:
+    return {"material_id": it.material_id, "shape_id": it.shape_id, "grade_id": it.grade_id, "size": it.size}
+
+
+def resolve_item(s: Session, sp, what="material") -> Item:
+    """Find the stock line for Material + Type + Grade + Size, or make it. Scrap is material only."""
+    mat = s.get(Material, sp.material_id) if sp and sp.material_id else None
+    if not mat:
+        bad(f"Select {what}.")
+    shape = grade = None
+    size = key = ""
+    if not mat.is_scrap:
+        shape = s.get(Shape, sp.shape_id) if sp.shape_id else None
+        if not shape:
+            bad(f"Select type (tube, rod, sheet or strip) for {mat.name}.")
+        grade = s.get(Grade, sp.grade_id) if sp.grade_id else None
+        if grade and grade.material_id != mat.id:
+            bad(f"{grade.name} is not a {mat.name} grade. Select the grade again.")
+        if not grade and s.exec(select(Grade).where(Grade.material_id == mat.id)).first():
+            bad(f"Select {mat.name} grade.")
+        size, key = clean_size(sp.size)
+    it = s.exec(select(Item).where(Item.material_id == mat.id, _is(Item.shape_id, shape and shape.id),
+                                   _is(Item.grade_id, grade and grade.id), Item.size_key == key)).first()
     if not it:
-        bad(f"Select a {label.lower()}.")
+        it = Item(material_id=mat.id, shape_id=shape and shape.id, grade_id=grade and grade.id,
+                  size=size, size_key=key, name=item_label(mat, shape, grade, size),
+                  type=ItemType.SCRAP if mat.is_scrap else ItemType.RAW)
+        s.add(it)
+        s.flush()
     return it
+
+
+def refresh_item_names(s: Session):
+    """After a material, type or grade is renamed, so stock lines show the new name."""
+    mats, shapes, grades = ({r.id: r for r in s.exec(select(t)).all()} for t in (Material, Shape, Grade))
+    for it in s.exec(select(Item)).all():
+        mat = mats[it.material_id]
+        name = item_label(mat, shapes.get(it.shape_id), grades.get(it.grade_id), it.size)
+        typ = ItemType.SCRAP if mat.is_scrap else ItemType.RAW
+        if (it.name, it.type) != (name, typ):
+            it.name, it.type = name, typ
+            s.add(it)
 
 
 def get_party(s: Session, party_id: Optional[int]) -> Party:
@@ -225,7 +277,7 @@ def ensure_stock(s: Session, item_ids):
 
 
 def lot_received(s: Session, lot_ids=None) -> dict:
-    """{lot_id: {'FG': qty, 'SCRAP': qty, 'count': n}} from live Labour In entries."""
+    """{lot_id: {'RECV': qty, 'SCRAP': qty, 'count': n}} from live Labour In entries."""
     stmt = (select(Entry.lot_id, Movement.role, func.sum(Movement.qty))
             .join(Movement, Movement.entry_id == Entry.id)
             .where(Entry.entry_type == EntryType.LABOUR_IN, Entry.deleted_at.is_(None))
@@ -238,27 +290,28 @@ def lot_received(s: Session, lot_ids=None) -> dict:
         cnt = cnt.where(Entry.lot_id.in_(list(lot_ids)))
     out: dict = {}
     for lid, role, q in s.exec(stmt).all():
-        out.setdefault(lid, {"FG": 0.0, "SCRAP": 0.0, "count": 0})[role] = q3(q)
+        out.setdefault(lid, {"RECV": 0.0, "SCRAP": 0.0, "count": 0})[role] = q3(q)
     for lid, n in s.exec(cnt).all():
-        out.setdefault(lid, {"FG": 0.0, "SCRAP": 0.0, "count": 0})["count"] = n
+        out.setdefault(lid, {"RECV": 0.0, "SCRAP": 0.0, "count": 0})["count"] = n
     return out
 
 
 def lot_view(s: Session, lot: LabourLot, rec: Optional[dict] = None) -> dict:
     if rec is None:
         rec = lot_received(s, [lot.id]).get(lot.id, {})
-    fg, scrap = rec.get("FG", 0.0), rec.get("SCRAP", 0.0)
+    recv, scrap = rec.get("RECV", 0.0), rec.get("SCRAP", 0.0)
     burn = lot.burn_qty if lot.status == LotStatus.CLOSED else 0.0
-    pending = 0.0 if lot.status != LotStatus.OPEN else q3(lot.qty_out - fg - scrap)
+    pending = 0.0 if lot.status != LotStatus.OPEN else q3(lot.qty_out - recv - scrap)
     item, vendor = s.get(Item, lot.item_id), s.get(Vendor, lot.vendor_id)
+    mat = s.get(Material, item.material_id)
     end = lot.closed_date or date.today()
     return {
         "id": lot.id, "challan_no": lot.challan_no, "status": lot.status,
         "vendor_id": lot.vendor_id, "vendor_name": vendor.name if vendor else "?",
-        "item_id": lot.item_id, "item_name": item.name if item else "?",
-        "hsn": item.hsn if item else "", "unit": item.unit if item else "kg",
+        "item_id": lot.item_id, "item_name": item.name, "spec": item_spec(item),
+        "material_name": mat.name, "unit": item.unit,
         "date_out": lot.date_out.isoformat(), "qty_out": q3(lot.qty_out),
-        "fg_in": fg, "scrap_in": scrap, "burn": q3(burn), "pending": pending,
+        "recv_in": recv, "scrap_in": scrap, "burn": q3(burn), "pending": pending,
         "burn_pct": round(burn / lot.qty_out * 100, 2) if lot.qty_out and burn else 0.0,
         "receipts": rec.get("count", 0), "days_out": (end - lot.date_out).days,
         "is_opening": lot.is_opening, "out_entry_id": lot.out_entry_id,
@@ -270,7 +323,7 @@ def ensure_lot(s: Session, lot: LabourLot):
     s.flush()
     v = lot_view(s, lot)
     if lot.status == LotStatus.OPEN and v["pending"] < -EPS:
-        got = v["fg_in"] + v["scrap_in"]
+        got = v["recv_in"] + v["scrap_in"]
         bad(f"Challan {lot.challan_no}: received {fmt(got)} kg is more than the "
             f"{fmt(lot.qty_out)} kg sent.")
 
@@ -282,14 +335,14 @@ def entry_view(s: Session, e: Entry) -> dict:
     lines = []
     for m in s.exec(select(Movement).where(Movement.entry_id == e.id)).all():
         it = s.get(Item, m.item_id)
-        lines.append({"item_id": m.item_id, "item_name": it.name, "hsn": it.hsn,
+        lines.append({"item_id": m.item_id, "item_name": it.name,
                       "unit": it.unit, "qty": q3(m.qty), "role": m.role})
     v = {
         "id": e.id, "entry_type": e.entry_type, "date": e.date.isoformat(),
         "party_id": e.party_id, "party_name": party.name if party else None,
         "vendor_id": e.vendor_id, "vendor_name": vendor.name if vendor else None,
         "lot_id": e.lot_id, "challan_no": lot.challan_no if lot else None,
-        "ref_no": e.ref_no, "remarks": e.remarks, "lines": lines,
+        "ref_no": e.ref_no, "hsn": e.hsn, "remarks": e.remarks, "lines": lines,
         "created_at": e.created_at.isoformat(timespec="seconds"),
         "updated_at": e.updated_at.isoformat(timespec="seconds") if e.updated_at else None,
         "deleted_at": e.deleted_at.isoformat(timespec="seconds") if e.deleted_at else None,
@@ -299,7 +352,7 @@ def entry_view(s: Session, e: Entry) -> dict:
         v["is_opening"] = lot.is_opening
         if lot.is_opening:
             it = s.get(Item, lot.item_id)
-            v["lines"] = [{"item_id": it.id, "item_name": it.name, "hsn": it.hsn,
+            v["lines"] = [{"item_id": it.id, "item_name": it.name,
                            "unit": it.unit, "qty": -q3(lot.qty_out), "role": "OUT"}]
         v["lot_status"] = lot.status
     if e.entry_type == EntryType.LABOUR_IN and lot and lot.closed_by_entry_id == e.id \
@@ -328,15 +381,25 @@ def next_challan(s: Session) -> str:
 NAME = PField(max_length=120)
 REF = PField("", max_length=60)
 REMARKS = PField("", max_length=500)
+HSN = PField("", max_length=20)
 PASSWORD = PField(max_length=128)
+
+
+class Spec(BaseModel):
+    """What the material is. Type, grade and size are ignored for scrap."""
+    material_id: Optional[int] = None
+    shape_id: Optional[int] = None
+    grade_id: Optional[int] = None
+    size: str = PField("", max_length=40)
 
 
 class PurchaseBody(BaseModel):
     date: Date
-    item_id: int
+    spec: Spec
     party_id: int
     qty: float = PField(gt=0)
     ref_no: str = REF
+    hsn: str = HSN
     remarks: str = REMARKS
 
 
@@ -346,17 +409,19 @@ class SaleBody(PurchaseBody):
 
 class OpeningBody(BaseModel):
     date: Date
-    item_id: int
+    spec: Spec
     qty: float = PField(gt=0)
+    hsn: str = HSN
     remarks: str = REMARKS
 
 
 class LabourOutBody(BaseModel):
     date: Date
     vendor_id: int
-    item_id: int
+    spec: Spec
     qty: float = PField(gt=0)
     challan_no: str = REF
+    hsn: str = HSN
     remarks: str = REMARKS
     is_opening: bool = False
 
@@ -364,20 +429,30 @@ class LabourOutBody(BaseModel):
 class LabourInBody(BaseModel):
     date: Date
     lot_id: int
-    fg_item_id: Optional[int] = None
-    fg_qty: float = PField(default=0, ge=0)
-    scrap_item_id: Optional[int] = None
+    recv: Optional[Spec] = None  # metal that came back
+    recv_qty: float = PField(default=0, ge=0)
+    scrap_material_id: Optional[int] = None
     scrap_qty: float = PField(default=0, ge=0)
     close: bool = False
     ref_no: str = REF
+    hsn: str = HSN
     remarks: str = REMARKS
 
 
-class ItemBody(BaseModel):
+class MaterialBody(BaseModel):
     name: str = NAME
-    hsn: str = PField("", max_length=20)
-    type: str = ItemType.RAW
-    unit: str = PField("kg", max_length=10)
+    is_scrap: bool = False
+    active: bool = True
+
+
+class ShapeBody(BaseModel):
+    name: str = NAME
+    active: bool = True
+
+
+class GradeBody(BaseModel):
+    name: str = NAME
+    material_id: int
     active: bool = True
 
 
@@ -408,8 +483,8 @@ def _reset_movements(s: Session, e: Entry) -> set:
 def write_simple(s: Session, e: Entry, etype: str, b) -> Entry:
     """Purchase / Sale / Opening: one movement each."""
     check_date(b.date)
-    item = get_item(s, b.item_id)
-    e.entry_type, e.date, e.remarks = etype, b.date, b.remarks.strip()
+    item = resolve_item(s, b.spec)
+    e.entry_type, e.date, e.remarks, e.hsn = etype, b.date, b.remarks.strip(), b.hsn.strip()
     if etype in (EntryType.PURCHASE, EntryType.SALE):
         e.party_id = get_party(s, b.party_id).id
         e.ref_no = b.ref_no.strip()
@@ -424,8 +499,8 @@ def write_simple(s: Session, e: Entry, etype: str, b) -> Entry:
 
 def write_labour_out(s: Session, e: Entry, b: LabourOutBody, lot: Optional[LabourLot]) -> Entry:
     check_date(b.date)
-    item = get_item(s, b.item_id)
     vendor = get_vendor(s, b.vendor_id)
+    item = resolve_item(s, b.spec)
     challan = (b.challan_no or "").strip() or next_challan(s)
     dup = s.exec(select(LabourLot).where(func.lower(LabourLot.challan_no) == challan.lower(),
                                          LabourLot.status != LotStatus.CANCELLED)).first()
@@ -437,13 +512,13 @@ def write_labour_out(s: Session, e: Entry, b: LabourOutBody, lot: Optional[Labou
         if rec.get("count"):
             if lot.status == LotStatus.CLOSED:
                 bad("This challan is closed. Delete its closing Labour In entry first.")
-            if b.item_id != lot.item_id or b.vendor_id != lot.vendor_id:
+            if item.id != lot.item_id or b.vendor_id != lot.vendor_id:
                 bad("Material/vendor can't change after Labour In entries are made against this challan.")
             if b.is_opening != lot.is_opening:
                 bad("Can't change the opening-balance option after Labour In entries are made.")
 
     e.entry_type, e.date = EntryType.LABOUR_OUT, b.date
-    e.vendor_id, e.ref_no, e.remarks = vendor.id, challan, b.remarks.strip()
+    e.vendor_id, e.ref_no, e.remarks, e.hsn = vendor.id, challan, b.remarks.strip(), b.hsn.strip()
     s.add(e)
     s.flush()
     if lot is None:
@@ -472,18 +547,23 @@ def write_labour_in(s: Session, b: LabourInBody) -> Entry:
         bad(f"Challan {lot.challan_no} is already closed.")
     if b.date < lot.date_out:
         bad(f"Date is before the challan date ({lot.date_out.strftime('%d-%m-%Y')}).")
-    fg_qty, scrap_qty = q3(b.fg_qty), q3(b.scrap_qty)
-    if fg_qty <= 0 and scrap_qty <= 0 and not b.close:
-        bad("Enter finished or scrap quantity.")
-    fg_item = get_item(s, b.fg_item_id, "Finished item") if fg_qty > 0 else None
-    scrap_item = get_item(s, b.scrap_item_id, "Scrap item") if scrap_qty > 0 else None
+    recv_qty, scrap_qty = q3(b.recv_qty), q3(b.scrap_qty)
+    if recv_qty <= 0 and scrap_qty <= 0 and not b.close:
+        bad("Enter received or scrap quantity.")
+    recv_item = resolve_item(s, b.recv, "the material received") if recv_qty > 0 else None
+    scrap_item = None
+    if scrap_qty > 0:
+        mat = s.get(Material, b.scrap_material_id) if b.scrap_material_id else None
+        if not mat or not mat.is_scrap:
+            bad("Select which scrap came back.")
+        scrap_item = resolve_item(s, Spec(material_id=mat.id))
 
-    e = Entry(entry_type=EntryType.LABOUR_IN, date=b.date, vendor_id=lot.vendor_id,
-              lot_id=lot.id, ref_no=b.ref_no.strip(), remarks=b.remarks.strip())
+    e = Entry(entry_type=EntryType.LABOUR_IN, date=b.date, vendor_id=lot.vendor_id, lot_id=lot.id,
+              ref_no=b.ref_no.strip(), hsn=b.hsn.strip(), remarks=b.remarks.strip())
     s.add(e)
     s.flush()
-    if fg_item:
-        s.add(Movement(entry_id=e.id, item_id=fg_item.id, qty=fg_qty, role="FG"))
+    if recv_item:
+        s.add(Movement(entry_id=e.id, item_id=recv_item.id, qty=recv_qty, role="RECV"))
     if scrap_item:
         s.add(Movement(entry_id=e.id, item_id=scrap_item.id, qty=scrap_qty, role="SCRAP"))
     ensure_lot(s, lot)
@@ -555,16 +635,16 @@ def get_entry(entry_id: int, s: Session = Depends(get_session)):
     if not e:
         bad("Entry not found.", 404)
     v = entry_view(s, e)
-    form: dict = {"date": e.date.isoformat(), "remarks": e.remarks}
+    form: dict = {"date": e.date.isoformat(), "remarks": e.remarks, "hsn": e.hsn}
     mv = s.exec(select(Movement).where(Movement.entry_id == e.id)).first()
     if e.entry_type in (EntryType.PURCHASE, EntryType.SALE, EntryType.OPENING) and mv:
-        form.update(item_id=mv.item_id, qty=abs(q3(mv.qty)))
+        form.update(item_id=mv.item_id, spec=item_spec(s.get(Item, mv.item_id)), qty=abs(q3(mv.qty)))
         if e.entry_type != EntryType.OPENING:
             form.update(party_id=e.party_id, ref_no=e.ref_no)
     elif e.entry_type == EntryType.LABOUR_OUT:
         lot = s.get(LabourLot, e.lot_id)
-        form.update(vendor_id=lot.vendor_id, item_id=lot.item_id, qty=q3(lot.qty_out),
-                    challan_no=lot.challan_no, is_opening=lot.is_opening)
+        form.update(vendor_id=lot.vendor_id, item_id=lot.item_id, spec=item_spec(s.get(Item, lot.item_id)),
+                    qty=q3(lot.qty_out), challan_no=lot.challan_no, is_opening=lot.is_opening)
     v["form"] = form
     names = {u.id: u.name for u in s.exec(select(User)).all()}
     v["history"] = [{"at": a.at.isoformat(timespec="seconds"), "action": a.action,
@@ -670,7 +750,7 @@ def list_entries(
             continue
         if needle:
             hay = " ".join(str(x or "") for x in (
-                v["party_name"], v["vendor_name"], v["ref_no"], v["remarks"], v["challan_no"],
+                v["party_name"], v["vendor_name"], v["ref_no"], v["hsn"], v["remarks"], v["challan_no"],
                 *[l["item_name"] for l in v["lines"]])).lower()
             if needle not in hay:
                 continue
@@ -700,12 +780,19 @@ def list_lots(vendor_id: Optional[int] = None, status: Optional[str] = "OPEN",
     return [lot_view(s, l, rec.get(l.id, {})) for l in lots]
 
 
+def item_rows(s: Session) -> list:
+    """Every stock line, in master order. `used` = has live entries (so typos with no entries drop out)."""
+    stock = stock_map(s)
+    rows = [{"id": i.id, "name": i.name, "type": i.type, "unit": i.unit, **item_spec(i), "size_key": i.size_key,
+             "stock": stock.get(i.id, 0.0), "used": i.id in stock}
+            for i in s.exec(select(Item)).all()]
+    return sorted(rows, key=lambda r: (r["type"] == ItemType.SCRAP, r["material_id"], r["shape_id"] or 0,
+                                       r["grade_id"] or 0, r["size_key"]))
+
+
 @app.get("/api/stock")
 def get_stock(s: Session = Depends(get_session)):
-    stock = stock_map(s)
-    items = [{"id": i.id, "name": i.name, "hsn": i.hsn, "type": i.type, "unit": i.unit,
-              "active": i.active, "stock": stock.get(i.id, 0.0)}
-             for i in s.exec(select(Item).order_by(Item.name)).all()]
+    items = item_rows(s)
     lots = s.exec(select(LabourLot).where(LabourLot.status == LotStatus.OPEN)
                   .order_by(LabourLot.date_out)).all()
     rec = lot_received(s, [l.id for l in lots])
@@ -714,12 +801,12 @@ def get_stock(s: Session = Depends(get_session)):
 
 @app.get("/api/meta")
 def meta(s: Session = Depends(get_session)):
-    stock = stock_map(s)
     return {
         "today": date.today().isoformat(),
-        "items": [{"id": i.id, "name": i.name, "hsn": i.hsn, "type": i.type, "unit": i.unit,
-                   "active": i.active, "stock": stock.get(i.id, 0.0)}
-                  for i in s.exec(select(Item).order_by(Item.name)).all()],
+        "items": item_rows(s),
+        "materials": [m.model_dump(mode="json") for m in s.exec(select(Material).order_by(Material.id)).all()],
+        "shapes": [m.model_dump(mode="json") for m in s.exec(select(Shape).order_by(Shape.id)).all()],
+        "grades": [m.model_dump(mode="json") for m in s.exec(select(Grade).order_by(Grade.id)).all()],
         "parties": [p.model_dump(mode="json") for p in
                     s.exec(select(Party).order_by(func.lower(Party.name))).all()],
         "vendors": [v.model_dump(mode="json") for v in s.exec(select(Vendor).order_by(Vendor.id)).all()],
@@ -735,33 +822,89 @@ def _clean(name: str, what: str) -> str:
     return name
 
 
-@app.post("/api/items")
-def create_item(b: ItemBody, s: Session = Depends(get_session)):
-    return _save_item(s, Item(), b)
+def _commit_master(s: Session, kind: str, row):
+    s.add(row)
+    s.flush()
+    refresh_item_names(s)
+    audit(s, "MASTER", None, {kind: row.model_dump(mode="json")})
+    s.commit()
+    s.refresh(row)
+    return row
 
 
-@app.put("/api/items/{item_id}")
-def update_item(item_id: int, b: ItemBody, s: Session = Depends(get_session)):
-    it = s.get(Item, item_id) or bad("Item not found.", 404)
-    return _save_item(s, it, b)
+@app.post("/api/materials")
+def create_material(b: MaterialBody, s: Session = Depends(get_session)):
+    return _save_material(s, Material(), b)
 
 
-def _save_item(s: Session, it: Item, b: ItemBody):
+@app.put("/api/materials/{material_id}")
+def update_material(material_id: int, b: MaterialBody, s: Session = Depends(get_session)):
+    m = s.get(Material, material_id) or bad("Material not found.", 404)
+    return _save_material(s, m, b)
+
+
+def _save_material(s: Session, m: Material, b: MaterialBody):
     with WRITE_LOCK:
-        name, hsn = _clean(b.name, "Item"), b.hsn.strip()
-        if b.type not in ItemType.ALL:
-            bad("Type must be RAW, FG or SCRAP.")
-        dup = s.exec(select(Item).where(func.lower(Item.name) == name.lower(), Item.hsn == hsn)).first()
-        if dup and dup.id != it.id:
-            bad(f"{name} ({hsn or 'no HSN'}) already exists.")
-        it.name, it.hsn, it.type = name, hsn, b.type
-        it.unit, it.active = (b.unit.strip() or "kg"), b.active
-        s.add(it)
-        s.flush()
-        audit(s, "MASTER", None, {"item": it.model_dump(mode="json")})
-        s.commit()
-        s.refresh(it)
-        return it
+        name = _clean(b.name, "Material")
+        dup = s.exec(select(Material).where(func.lower(Material.name) == name.lower())).first()
+        if dup and dup.id != m.id:
+            bad(f"Material '{dup.name}' already exists.")
+        if m.id and b.is_scrap != m.is_scrap:
+            if s.exec(select(Item).where(Item.material_id == m.id)).first():
+                bad(f"{m.name} is already used in entries, so it can't switch between scrap and metal.")
+            if b.is_scrap and s.exec(select(Grade).where(Grade.material_id == m.id)).first():
+                bad(f"{m.name} has grades. Scrap has no grades, so move or hide them first.")
+        m.name, m.is_scrap, m.active = name, b.is_scrap, b.active
+        return _commit_master(s, "material", m)
+
+
+@app.post("/api/shapes")
+def create_shape(b: ShapeBody, s: Session = Depends(get_session)):
+    return _save_shape(s, Shape(), b)
+
+
+@app.put("/api/shapes/{shape_id}")
+def update_shape(shape_id: int, b: ShapeBody, s: Session = Depends(get_session)):
+    sh = s.get(Shape, shape_id) or bad("Type not found.", 404)
+    return _save_shape(s, sh, b)
+
+
+def _save_shape(s: Session, sh: Shape, b: ShapeBody):
+    with WRITE_LOCK:
+        name = _clean(b.name, "Type")
+        dup = s.exec(select(Shape).where(func.lower(Shape.name) == name.lower())).first()
+        if dup and dup.id != sh.id:
+            bad(f"Type '{dup.name}' already exists.")
+        sh.name, sh.active = name, b.active
+        return _commit_master(s, "shape", sh)
+
+
+@app.post("/api/grades")
+def create_grade(b: GradeBody, s: Session = Depends(get_session)):
+    return _save_grade(s, Grade(material_id=b.material_id), b)
+
+
+@app.put("/api/grades/{grade_id}")
+def update_grade(grade_id: int, b: GradeBody, s: Session = Depends(get_session)):
+    g = s.get(Grade, grade_id) or bad("Grade not found.", 404)
+    return _save_grade(s, g, b)
+
+
+def _save_grade(s: Session, g: Grade, b: GradeBody):
+    with WRITE_LOCK:
+        name = _clean(b.name, "Grade")
+        mat = s.get(Material, b.material_id)
+        if not mat:
+            bad("Select the material this grade is for.")
+        if mat.is_scrap:
+            bad("Scrap has no grades. Pick Brass, Copper or another metal.")
+        dup = s.exec(select(Grade).where(Grade.material_id == mat.id, func.lower(Grade.name) == name.lower())).first()
+        if dup and dup.id != g.id:
+            bad(f"{mat.name} already has grade {dup.name}.")
+        if g.id and g.material_id != mat.id and s.exec(select(Item).where(Item.grade_id == g.id)).first():
+            bad(f"Grade {g.name} is already used in entries, so it can't move to another material.")
+        g.name, g.material_id, g.active = name, mat.id, b.active
+        return _commit_master(s, "grade", g)
 
 
 @app.post("/api/parties")
@@ -979,7 +1122,7 @@ def _pct(part: float, whole: float) -> float:
 
 @app.get("/api/reports/reconciliation")
 def report_reconciliation(date_from: date, date_to: date, s: Session = Depends(get_session)):
-    """Per item: opening + in − out = closing, over the period."""
+    """Per stock line: opening + in − out = closing, over the period."""
     check_period(date_from, date_to)
     moves = (select(Movement.item_id, Entry.entry_type, func.sum(Movement.qty))
              .join(Entry, Entry.id == Movement.entry_id).where(Entry.deleted_at.is_(None))
@@ -992,11 +1135,12 @@ def report_reconciliation(date_from: date, date_to: date, s: Session = Depends(g
         during.setdefault(iid, {})[et] = q
     fields = ("opening", "purchase", "opening_entry", "job_in", "job_out", "sale", "closing")
     rows = []
-    order = {t: n for n, t in enumerate(ItemType.ALL)}
-    for it in sorted(s.exec(select(Item)).all(), key=lambda i: (order.get(i.type, 9), i.name.lower())):
-        d = during.get(it.id, {})
-        r = {"item": it.name, "hsn": it.hsn, "type": it.type, "unit": it.unit,
-             "opening": q3(before.get(it.id, 0.0)),
+    mats, shapes, grades = ({r.id: r.name for r in s.exec(select(t)).all()} for t in (Material, Shape, Grade))
+    for it in item_rows(s):
+        d = during.get(it["id"], {})
+        r = {"item": it["name"], "material": mats[it["material_id"]], "shape": shapes.get(it["shape_id"], ""),
+             "grade": grades.get(it["grade_id"], ""), "size": it["size"], "unit": it["unit"],
+             "opening": q3(before.get(it["id"], 0.0)),
              "purchase": q3(d.get(EntryType.PURCHASE, 0.0)),
              "opening_entry": q3(d.get(EntryType.OPENING, 0.0)),
              "job_in": q3(d.get(EntryType.LABOUR_IN, 0.0)),
@@ -1006,11 +1150,12 @@ def report_reconciliation(date_from: date, date_to: date, s: Session = Depends(g
                           - r["job_out"] - r["sale"])
         if any(abs(r[f]) > EPS for f in fields):
             rows.append(r)
-    cols = [["item", "Item", ""], ["hsn", "HSN", ""], ["type", "Type", ""], ["unit", "Unit", ""],
+    cols = [["material", "Material", ""], ["shape", "Type", ""], ["grade", "Grade", ""], ["size", "Size", ""],
+            ["unit", "Unit", ""],
             ["opening", "Opening", "num"], ["purchase", "Purchased", "num"],
             ["opening_entry", "Opening entry", "num"], ["job_out", "Job work out", "num"],
             ["job_in", "Job work in", "num"], ["sale", "Sold", "num"], ["closing", "Closing", "num"]]
-    return {"tables": [{"key": "reconciliation", "title": "Item reconciliation", "cols": cols, "rows": rows}]}
+    return {"tables": [{"key": "reconciliation", "title": "Stock reconciliation", "cols": cols, "rows": rows}]}
 
 
 @app.get("/api/reports/vendor-pending")
@@ -1023,7 +1168,7 @@ def report_vendor_pending(s: Session = Depends(get_session)):
     for l in lots:
         v = lot_view(s, l, rec.get(l.id, {}))
         rows.append({"vendor": v["vendor_name"], "challan_no": v["challan_no"], "date_out": v["date_out"],
-                     "item": v["item_name"], "sent": v["qty_out"], "received": q3(v["fg_in"] + v["scrap_in"]),
+                     "item": v["item_name"], "sent": v["qty_out"], "received": q3(v["recv_in"] + v["scrap_in"]),
                      "pending": v["pending"], "days_out": v["days_out"],
                      "bucket": next(b for lim, b in AGING_BUCKETS if v["days_out"] <= lim)})
     names = [b for _, b in AGING_BUCKETS]
@@ -1059,10 +1204,11 @@ def report_burn(date_from: date, date_to: date, s: Session = Depends(get_session
     rows = []
     for l in lots:
         v = lot_view(s, l, rec.get(l.id, {}))
-        rows.append({"vendor": v["vendor_name"], "challan_no": v["challan_no"], "item": v["item_name"],
-                     "date_out": v["date_out"], "closed": v["closed_date"], "sent": v["qty_out"],
-                     "fg": v["fg_in"], "scrap": v["scrap_in"], "burn": v["burn"], "burn_pct": v["burn_pct"]})
-    qty = ["sent", "fg", "scrap", "burn"]
+        rows.append({"vendor": v["vendor_name"], "challan_no": v["challan_no"], "material": v["material_name"],
+                     "item": v["item_name"], "date_out": v["date_out"], "closed": v["closed_date"],
+                     "sent": v["qty_out"], "received": v["recv_in"], "scrap": v["scrap_in"],
+                     "burn": v["burn"], "burn_pct": v["burn_pct"]})
+    qty = ["sent", "received", "scrap", "burn"]
 
     def group(field, label):
         out = []
@@ -1073,17 +1219,17 @@ def report_burn(date_from: date, date_to: date, s: Session = Depends(get_session
         tot = _sum_rows(rows, qty)
         return {"key": f"burn-by-{field}", "title": f"Burn by {label}",
                 "cols": [[field, label.capitalize(), ""], ["challans", "Challans", ""],
-                         *[[f, n, "num"] for f, n in zip(qty, ("Sent", "Finished", "Scrap", "Burn"))],
+                         *[[f, n, "num"] for f, n in zip(qty, ("Sent", "Received", "Scrap", "Burn"))],
                          ["burn_pct", "Burn %", "pct"]],
                 "rows": out, "total": {field: "Total", "challans": len(rows), **tot,
                                        "burn_pct": _pct(tot["burn"], tot["sent"])}}
 
     return {"tables": [
-        group("vendor", "vendor"), group("item", "material"),
+        group("vendor", "vendor"), group("material", "material"),
         {"key": "burn-challans", "title": "Closed challans",
          "cols": [["vendor", "Vendor", ""], ["challan_no", "Challan", ""], ["item", "Material", ""],
                   ["date_out", "Sent on", "date"], ["closed", "Closed on", "date"], ["sent", "Sent", "num"],
-                  ["fg", "Finished", "num"], ["scrap", "Scrap", "num"], ["burn", "Burn", "num"],
+                  ["received", "Received", "num"], ["scrap", "Scrap", "num"], ["burn", "Burn", "num"],
                   ["burn_pct", "Burn %", "pct"]],
          "rows": rows},
     ]}
@@ -1132,7 +1278,29 @@ def download_backup():
 
 # ---------------------------------------------------------------- startup + static
 
+def reset_flat_item_tables():
+    """Before materials/types/grades, items were one flat list and the data was trial data only.
+    Such a database gets a backup copy, then its stock tables are dropped (users, parties and
+    vendors stay) so they are made again in the new shape."""
+    if not DB_PATH.exists():
+        return
+    con = sqlite3.connect(DB_PATH)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(item)")}
+    con.close()
+    if not cols or "material_id" in cols:
+        return
+    copy = make_backup(BACKUP_DIR / f"before-material-grades-{datetime.now():%Y%m%d-%H%M%S}.db")
+    con = sqlite3.connect(DB_PATH)
+    with con:
+        for t in ("movement", "labourlot", "entry", "item", "auditlog"):
+            con.execute(f"DROP TABLE IF EXISTS {t}")
+    con.close()
+    print(f"\n  Stock entries were reset for the new Material / Type / Grade / Size fields."
+          f"\n  The old data is saved in {copy}\n", flush=True)
+
+
 def init_db():
+    reset_flat_item_tables()
     SQLModel.metadata.create_all(engine)
     with engine.begin() as conn:  # create_all doesn't add columns to existing tables
         for table, col, ddl in (("auditlog", "user_id", "INTEGER"),

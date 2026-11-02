@@ -14,7 +14,7 @@ def test_login_and_roles():
     assert anon.post("/api/auth/setup", json={"name": "Hacker", "password": "1234", "code": "x"}).status_code == 409
     # not logged in: data is closed, login screen info is open
     assert anon.get("/api/meta").status_code == 401
-    assert anon.post("/api/items", json={"name": "X"}).status_code == 401
+    assert anon.post("/api/materials", json={"name": "X"}).status_code == 401
     st = anon.get("/api/auth/state").json()
     assert st["me"] is None and "role" not in st["users"][0]
 
@@ -28,8 +28,9 @@ def test_login_and_roles():
     assert viewer.get("/api/auth/state").json()["me"]["role"] == "VIEWER"
     assert viewer.get("/api/meta").status_code == 200
     assert viewer.get("/api/stock").status_code == 200
-    for r in (viewer.post("/api/items", json={"name": "Viewer Item"}),
-              viewer.post("/api/entries/opening", json={"date": "2024-01-01", "item_id": 1, "qty": 5}),
+    for r in (viewer.post("/api/materials", json={"name": "Viewer Metal"}),
+              viewer.post("/api/grades", json={"name": "V1", "material_id": 1}),
+              viewer.post("/api/entries/opening", json={"date": "2024-01-01", "spec": {"material_id": 1}, "qty": 5}),
               viewer.delete("/api/entries/1"),
               viewer.get("/api/backup"),
               viewer.get("/api/users"),
@@ -89,9 +90,10 @@ def test_hardening():
     assert editor.get("/api/meta").headers["cache-control"] == "no-store"
     # bad edit input is a friendly 422, not a crash
     party = editor.post("/api/parties", json={"name": "Hardening Party"}).json()["id"]
-    item = editor.get("/api/meta").json()["items"][0]["id"]
-    e = editor.post("/api/entries/purchase", json={"date": "2024-01-02", "item_id": item, "party_id": party, "qty": 5}).json()
-    r = editor.put(f"/api/entries/{e['id']}", json={"date": "2024-01-02", "item_id": item, "party_id": party, "qty": -3})
+    scrap = next(m["id"] for m in editor.get("/api/meta").json()["materials"] if m["is_scrap"])
+    body = {"date": "2024-01-02", "spec": {"material_id": scrap}, "party_id": party, "qty": 5}
+    e = editor.post("/api/entries/purchase", json=body).json()
+    r = editor.put(f"/api/entries/{e['id']}", json={**body, "qty": -3})
     assert r.status_code == 422 and r.json()["detail"][0]["loc"][-1] == "qty"
     assert editor.delete(f"/api/entries/{e['id']}").status_code == 200  # leave the shared test DB as found
     # length limits
