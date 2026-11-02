@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#f5f4f1">
   <title>Stock Ledger</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -12,113 +12,128 @@
   <script defer src="vendor/alpine.min.js"></script>
   <style>[x-cloak]{display:none!important}</style>
 </head>
-<body class="bg-slate-100 text-slate-900 antialiased print:bg-white">
-<div x-data="app" class="min-h-screen pb-24 lg:pb-10 lg:pl-60 print:p-0">
+<body class="bg-paper text-ink antialiased print:bg-white">
+<div x-data="app" class="min-h-screen pb-24 lg:pb-12 lg:pl-60 print:p-0">
 
   <!-- ============ desktop sidebar ============ -->
-  <aside class="hidden lg:flex print:!hidden fixed inset-y-0 left-0 z-30 w-60 flex-col bg-slate-900 text-white">
-    <button @click="go('#/')" class="h-20 px-5 flex flex-col justify-center text-left border-b border-white/10 hover:bg-white/5">
-      <span class="text-lg font-bold">Stock Ledger</span>
-      <span class="text-sm text-slate-400" x-text="dmy(meta.today)"></span>
+  <aside class="hidden lg:flex print:!hidden fixed inset-y-0 left-0 z-30 w-60 flex-col bg-white border-r border-stone-200">
+    <button @click="go('#/')" class="h-16 px-5 flex items-center gap-3 text-left border-b border-stone-200 hover:bg-stone-50 transition-colors">
+      <img src="icon.svg" alt="" class="w-8 h-8 rounded-md">
+      <span class="min-w-0">
+        <span class="block text-[15px] font-semibold tracking-tight leading-5">Stock Ledger</span>
+        <span class="block text-xs text-stone-500 tabular-nums" x-text="dmy(meta.today)"></span>
+      </span>
     </button>
-    <nav class="p-3 space-y-1">
+    <nav class="p-3 space-y-0.5">
       <template x-for="n in NAV" :key="n[0]">
-        <button @click="nav(n)" class="w-full h-11 px-3 rounded-lg flex items-center gap-3 font-semibold hover:bg-white/10"
-                :class="navOn(n) ? 'bg-white/15 text-white' : 'text-slate-300'">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" viewBox="0 0 24 24"><path :d="n[3]"/></svg>
+        <button @click="nav(n)" class="relative w-full h-10 px-3 rounded-md flex items-center gap-3 text-sm font-medium transition-colors"
+                :class="navOn(n) ? 'bg-stone-100 text-ink before:absolute before:left-0 before:inset-y-2.5 before:w-[3px] before:rounded-r before:bg-copper-500' : 'text-stone-600 hover:bg-stone-50 hover:text-ink'">
+          <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" viewBox="0 0 24 24"><path :d="n[3]"/></svg>
           <span x-text="n[2]"></span>
         </button>
       </template>
     </nav>
-    <div x-show="canEdit" class="p-3 space-y-1 border-t border-white/10">
-      <div class="px-3 pt-1 pb-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">New entry</div>
+    <div x-show="canEdit" class="px-3 pb-3 space-y-0.5">
+      <div class="eyebrow px-3 pt-4 pb-2 border-t border-stone-100">New entry</div>
       <template x-for="t in ['PURCHASE','LABOUR_OUT','LABOUR_IN','SALE','OPENING']" :key="t">
-        <button @click="go('#/' + TYPES[t].route)" class="w-full h-10 px-3 rounded-lg flex items-center gap-3 text-sm font-semibold hover:bg-white/10"
-                :class="route === TYPES[t].route ? 'bg-white/15 text-white' : 'text-slate-300'">
-          <span class="w-2.5 h-2.5 rounded-full" :class="TYPES[t].tile"></span>
+        <button @click="go('#/' + TYPES[t].route)" class="w-full h-9 px-3 rounded-md flex items-center gap-3 text-[13px] font-medium transition-colors"
+                :class="route === TYPES[t].route ? 'bg-stone-100 text-ink' : 'text-stone-600 hover:bg-stone-50 hover:text-ink'">
+          <span class="w-2 h-2 rounded-sm" :class="TYPES[t].tile"></span>
           <span x-text="TYPES[t].label"></span>
         </button>
       </template>
     </div>
-    <div class="mt-auto p-3 space-y-1 border-t border-white/10">
-      <a x-show="canEdit" href="/api/backup" class="h-10 px-3 rounded-lg flex items-center gap-3 text-sm font-semibold text-slate-400 hover:bg-white/10 hover:text-white">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
+    <div class="mt-auto p-3 space-y-1 border-t border-stone-200">
+      <a x-show="canEdit" href="/api/backup" class="h-9 px-3 rounded-md flex items-center gap-3 text-[13px] font-medium text-stone-600 hover:bg-stone-50 hover:text-ink transition-colors">
+        <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
         Download backup
       </a>
       <div class="flex items-center gap-3 px-3 pt-2">
-        <span class="w-8 h-8 shrink-0 rounded-full bg-white/15 grid place-items-center text-sm font-bold" x-text="auth.me && auth.me.name[0].toUpperCase()"></span>
+        <span class="w-8 h-8 shrink-0 rounded-full bg-stone-100 ring-1 ring-stone-200 text-stone-700 grid place-items-center text-[13px] font-semibold" x-text="auth.me && auth.me.name[0].toUpperCase()"></span>
         <span class="min-w-0 flex-1">
-          <span class="block text-sm font-semibold truncate" x-text="auth.me && auth.me.name"></span>
-          <span class="block text-xs text-slate-400" x-text="canEdit ? 'Editor' : 'View only'"></span>
+          <span class="block text-[13px] font-semibold truncate" x-text="auth.me && auth.me.name"></span>
+          <span class="block text-xs text-stone-500" x-text="canEdit ? 'Editor' : 'View only'"></span>
         </span>
-        <button @click="logout()" class="text-xs font-semibold text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-white/10">Log out</button>
+        <button @click="logout()" class="text-xs font-medium text-stone-500 hover:text-ink px-2 py-1 rounded hover:bg-stone-100 transition-colors">Log out</button>
       </div>
     </div>
   </aside>
 
   <!-- ============ header ============ -->
-  <header class="sticky top-0 z-20 bg-slate-900 text-white lg:static lg:bg-transparent lg:text-slate-900 print:static print:bg-transparent print:text-slate-900">
-    <div class="mx-auto max-w-2xl lg:max-w-6xl h-14 lg:h-20 px-2 lg:px-6 flex items-center gap-1 print:max-w-none print:px-0 print:h-auto print:pb-2">
-      <button x-show="!['home','stock','ledger','masters','reports'].includes(route)" x-cloak @click="back()" class="print:hidden h-11 w-11 grid place-items-center rounded-lg active:bg-white/10 lg:hover:bg-slate-200" aria-label="Back">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+  <header class="sticky top-0 z-20 bg-paper/90 backdrop-blur-md border-b border-stone-200 lg:static lg:border-0 lg:bg-transparent lg:backdrop-blur-none print:static print:border-0 print:bg-transparent">
+    <div class="mx-auto max-w-2xl lg:max-w-6xl h-14 lg:h-24 px-2 lg:px-6 flex items-center gap-1 print:max-w-none print:px-0 print:h-auto print:pb-2">
+      <button x-show="!['home','stock','ledger','masters','reports'].includes(route)" x-cloak @click="back()" class="print:hidden h-11 w-11 grid place-items-center rounded-md text-stone-600 active:bg-stone-200/60 hover:bg-stone-200/60 hover:text-ink transition-colors" aria-label="Back">
+        <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <h1 class="text-lg lg:text-2xl font-bold px-2 truncate flex-1 print:!px-0" :class="['home','stock','ledger','masters','reports'].includes(route) ? 'pl-3' : ''" x-text="title">Stock Ledger</h1>
-      <span class="text-sm text-slate-300 pr-1 lg:hidden" x-show="route === 'home'" x-text="dmy(meta.today)"></span>
-      <button x-show="auth.me" @click="logout()" class="lg:hidden h-9 max-w-[7rem] px-3 mr-1 rounded-full bg-white/10 active:bg-white/20 text-sm font-semibold truncate"
-              :aria-label="'Logged in as ' + (auth.me && auth.me.name) + '. Tap to log out.'"
-              x-text="auth.me && (auth.me.name.split(' ')[0] + (canEdit ? '' : ' 👁'))"></button>
+      <h1 class="text-[17px] lg:text-[28px] font-semibold tracking-tight px-2 truncate flex-1 print:!px-0" :class="['home','stock','ledger','masters','reports'].includes(route) ? 'pl-3' : ''" x-text="title">Stock Ledger</h1>
+      <span class="text-[13px] text-stone-500 tabular-nums pr-2 lg:hidden" x-show="route === 'home'" x-text="dmy(meta.today)"></span>
+      <button x-show="auth.me" @click="logout()" class="lg:hidden h-9 max-w-[8rem] pl-1 pr-3 mr-1 rounded-full border border-stone-300 bg-white active:bg-stone-100 flex items-center gap-2 text-[13px] font-medium"
+              :aria-label="'Logged in as ' + (auth.me && auth.me.name) + '. Tap to log out.'">
+        <span class="w-7 h-7 shrink-0 rounded-full bg-stone-100 grid place-items-center text-xs font-semibold text-stone-700" x-text="auth.me && auth.me.name[0].toUpperCase()"></span>
+        <span class="truncate" x-text="auth.me && (auth.me.name.split(' ')[0] + (canEdit ? '' : ' · view'))"></span>
+      </button>
     </div>
   </header>
 
-  <main class="mx-auto max-w-2xl lg:max-w-6xl px-4 lg:px-8 pt-4 lg:pt-0 print:max-w-none print:px-0" x-cloak x-show="ready">
+  <main class="mx-auto max-w-2xl lg:max-w-6xl px-4 lg:px-8 pt-5 lg:pt-0 print:max-w-none print:px-0" x-cloak x-show="ready">
 
     <!-- ============ HOME ============ -->
     <template x-if="route === 'home'">
-      <div class="space-y-5">
+      <div class="space-y-6">
         <div x-show="canEdit" class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <template x-for="t in ['PURCHASE','LABOUR_OUT','LABOUR_IN','SALE']" :key="t">
-            <button @click="go('#/' + TYPES[t].route)" :class="TYPES[t].tile"
-                    class="rounded-2xl text-white text-left p-4 lg:p-5 h-32 flex flex-col justify-between shadow-sm active:scale-[.98] hover:brightness-110 hover:shadow-md transition">
-              <span class="w-10 h-10 rounded-full bg-white/20 grid place-items-center text-2xl font-bold"
-                    x-text="t === 'PURCHASE' || t === 'LABOUR_IN' ? '↓' : '↑'"></span>
-              <span class="text-xl font-bold leading-tight" x-text="TYPES[t].label"></span>
+            <button @click="go('#/' + TYPES[t].route)"
+                    class="card text-left p-4 h-32 flex flex-col justify-between transition hover:border-stone-300 hover:shadow-lift active:bg-stone-50 active:translate-y-px">
+              <span class="w-10 h-10 rounded-md grid place-items-center text-white" :class="TYPES[t].tile">
+                <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path :d="TYPES[t].icon"/></svg>
+              </span>
+              <span>
+                <span class="block text-[17px] lg:text-lg font-semibold leading-tight tracking-tight" x-text="TYPES[t].label"></span>
+                <span class="block text-[13px] text-stone-500 mt-0.5 truncate" x-text="TYPES[t].hint"></span>
+              </span>
             </button>
           </template>
         </div>
 
-        <div class="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:gap-5 lg:items-start">
-        <button @click="canEdit ? go('#/labour-in') : (stockTab = 'VENDOR', go('#/stock'))" class="card w-full p-4 lg:p-5 text-left flex items-center justify-between active:bg-slate-50 hover:bg-slate-50 lg:col-start-3 lg:row-start-1">
-          <div>
-            <div class="text-sm text-slate-500">With vendors (open challans)</div>
-            <div class="text-2xl font-bold"><span x-text="num(homePending)"></span> <span class="text-base font-semibold text-slate-500">kg</span></div>
-            <div class="text-sm text-slate-600" x-text="homeLots.length + (homeLots.length === 1 ? ' challan open' : ' challans open')"></div>
+        <div class="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:gap-x-6 lg:gap-y-4 lg:items-start">
+        <button @click="canEdit ? go('#/labour-in') : (stockTab = 'VENDOR', go('#/stock'))" class="card w-full p-4 lg:p-5 text-left transition hover:border-stone-300 active:bg-stone-50 lg:col-start-3 lg:row-start-1 lg:mt-8">
+          <div class="flex items-center justify-between gap-2">
+            <span class="eyebrow">With vendors · open challans</span>
+            <svg class="w-4 h-4 text-stone-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
           </div>
-          <span x-show="homeOld" class="chip bg-amber-100 text-amber-800" x-text="homeOld + ' older than 6 months'"></span>
+          <div class="mt-3 text-[34px] leading-none font-semibold tracking-tight tabular-nums"><span x-text="num(homePending)"></span><span class="ml-1.5 text-base font-medium text-stone-500 tracking-normal">kg</span></div>
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-stone-600">
+            <span x-text="homeLots.length + (homeLots.length === 1 ? ' challan open' : ' challans open')"></span>
+            <span x-show="homeOld" class="chip bg-ochre-50 text-ochre-700 ring-ochre-200" x-text="homeOld + ' older than 6 months'"></span>
+          </div>
         </button>
 
         <div class="lg:col-span-2 lg:row-start-1 lg:row-span-2">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="font-bold text-slate-700">Recent entries</h2>
-            <button class="text-sm font-semibold text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-200" @click="nav(NAV[2])">See all</button>
+          <div class="flex items-center justify-between h-8 mb-1">
+            <h2 class="eyebrow">Recent entries</h2>
+            <button class="link -mr-2" @click="nav(NAV[2])">See all</button>
           </div>
-          <div class="card divide-y divide-slate-100">
+          <div class="card divide-y divide-stone-100 overflow-hidden">
             <template x-for="e in recent" :key="e.id">
-              <button class="w-full text-left p-3 flex items-start gap-3 active:bg-slate-50 hover:bg-slate-50" @click="go('#/entry/' + e.id)">
-                <span class="chip shrink-0 mt-0.5" :class="TYPES[e.entry_type].badge" x-text="TYPES[e.entry_type].label"></span>
+              <button class="tap w-full text-left px-4 py-3 flex items-start gap-3" @click="go('#/entry/' + e.id)">
                 <span class="flex-1 min-w-0">
-                  <span class="block font-semibold truncate" x-text="e.lines.map(l => l.item_name).join(', ') || '—'"></span>
-                  <span class="block text-sm text-slate-500 truncate" x-text="[dmy(e.date), who(e), e.challan_no].filter(Boolean).join(' · ')"></span>
+                  <span class="block text-[15px] font-medium truncate" x-text="e.lines.map(l => l.item_name).join(', ') || '—'"></span>
+                  <span class="mt-1 flex items-center gap-2 text-[13px] text-stone-500 min-w-0">
+                    <span class="chip shrink-0" :class="TYPES[e.entry_type].badge" x-text="TYPES[e.entry_type].label"></span>
+                    <span class="truncate" x-text="[dmy(e.date), who(e), e.challan_no].filter(Boolean).join(' · ')"></span>
+                  </span>
                 </span>
-                <span class="text-right text-sm font-semibold tabular-nums whitespace-nowrap">
-                  <template x-for="l in e.lines"><span class="block" :class="l.qty > 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="lineText(l)"></span></template>
+                <span class="text-right text-[15px] font-semibold tabular-nums whitespace-nowrap">
+                  <template x-for="l in e.lines"><span class="block" :class="l.qty > 0 ? 'text-moss-700' : 'text-brick-700'" x-text="lineText(l)"></span></template>
                 </span>
               </button>
             </template>
-            <div x-show="!recent.length" class="p-4 text-slate-500 text-center">No entries yet. Start with Opening Stock below.</div>
+            <div x-show="!recent.length" class="p-6 text-stone-500 text-center">No entries yet. Start with Opening Stock below.</div>
           </div>
         </div>
 
-        <button x-show="canEdit" @click="go('#/opening')" class="btn-ghost w-full lg:col-start-3">Opening Stock entry</button>
+        <button x-show="canEdit" @click="go('#/opening')" class="btn-ghost w-full lg:col-start-3">
+          <span class="w-2 h-2 rounded-sm" :class="TYPES.OPENING.tile"></span>Opening Stock entry</button>
         </div>
       </div>
     </template>
@@ -126,25 +141,25 @@
     <!-- ============ SAVED (all forms) ============ -->
     <template x-if="isForm && saved">
       <div class="space-y-4 lg:max-w-2xl">
-        <div class="card p-5 text-center">
-          <div class="mx-auto w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center mb-3">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+        <div class="card px-5 py-6 text-center">
+          <div class="mx-auto w-12 h-12 rounded-full bg-moss-50 ring-1 ring-moss-200 text-moss-700 grid place-items-center mb-3">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
           </div>
-          <div class="text-xl font-bold" x-text="(editId ? 'Updated' : 'Saved') + ': ' + TYPES[saved.entry_type].label"></div>
-          <div class="text-slate-500" x-text="[dmy(saved.date), saved.party_name || saved.vendor_name, saved.challan_no || saved.ref_no].filter(Boolean).join(' · ')"></div>
+          <div class="text-xl font-semibold tracking-tight" x-text="(editId ? 'Updated' : 'Saved') + ': ' + TYPES[saved.entry_type].label"></div>
+          <div class="text-sm text-stone-500 mt-0.5" x-text="[dmy(saved.date), saved.party_name || saved.vendor_name, saved.challan_no || saved.ref_no].filter(Boolean).join(' · ')"></div>
         </div>
-        <div class="card divide-y divide-slate-100">
+        <div class="card divide-y divide-stone-100">
           <template x-for="l in saved.lines">
             <div class="p-4 flex items-center justify-between gap-3">
               <div class="min-w-0">
-                <div class="font-semibold" x-text="l.item_name"></div>
-                <div class="text-sm text-slate-500">Stock now <b class="text-slate-800" x-text="stockNow(l.item_id)"></b></div>
+                <div class="font-medium" x-text="l.item_name"></div>
+                <div class="text-sm text-stone-500">Stock now <b class="font-semibold text-ink tabular-nums" x-text="stockNow(l.item_id)"></b></div>
               </div>
-              <div class="text-lg font-bold tabular-nums" :class="l.qty > 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="lineText(l)"></div>
+              <div class="shrink-0 whitespace-nowrap text-lg font-semibold tracking-tight tabular-nums" :class="l.qty > 0 ? 'text-moss-700' : 'text-brick-700'" x-text="lineText(l)"></div>
             </div>
           </template>
           <template x-if="saved.entry_type === 'LABOUR_OUT' && saved.is_opening">
-            <div class="p-4 text-sm text-slate-600">Opening balance: material was already with the vendor, so factory stock is not reduced.</div>
+            <div class="p-4 text-sm text-stone-600">Opening balance: material was already with the vendor, so factory stock is not reduced.</div>
           </template>
           <template x-if="saved.entry_type === 'LABOUR_IN'">
             <div class="p-4">
@@ -175,19 +190,19 @@
         <div x-show="route !== 'opening'">
           <label class="lbl" x-text="route === 'sale' ? 'Sold to (party)' : 'Purchased from (party)'"></label>
           <button type="button" class="pick" @click="pickParty('party_id')">
-            <span x-show="!form.party_id" class="text-slate-400"><span class="lg:hidden">Tap</span><span class="hidden lg:inline">Click</span> to select or add new</span>
+            <span x-show="!form.party_id" class="text-stone-400"><span class="lg:hidden">Tap</span><span class="hidden lg:inline">Click</span> to select or add new</span>
             <span x-show="form.party_id" class="font-semibold text-lg truncate" x-text="party(form.party_id) && party(form.party_id).name"></span>
-            <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            <svg class="w-5 h-5 text-stone-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
           </button>
         </div>
         <div data-spec="spec" class="space-y-4 lg:col-span-2"></div>
         <div>
           <div class="flex items-end justify-between">
             <label class="lbl">Quantity <span class="font-normal" x-text="'(' + specUnit('spec') + ')'"></span></label>
-            <button type="button" x-show="route === 'sale' && specStock('spec') > 0" class="text-sm font-semibold text-slate-700 mb-1.5 px-2"
+            <button type="button" x-show="route === 'sale' && specStock('spec') > 0" class="link mb-1 -mr-2"
                     @click="form.qty = specStock('spec')">All (<span x-text="num(specStock('spec'))"></span>)</button>
           </div>
-          <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.qty" placeholder="0">
+          <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl lg:text-xl font-semibold tracking-tight tabular-nums" x-model="form.qty" placeholder="0">
         </div>
         <div x-show="route !== 'opening'">
           <label class="lbl" x-text="route === 'sale' ? 'Invoice no. (optional)' : 'Bill no. (optional)'"></label>
@@ -213,8 +228,8 @@
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
             <template x-for="v in activeVendors" :key="v.id">
               <button type="button" @click="form.vendor_id = v.id"
-                      :class="form.vendor_id === v.id ? 'bg-amber-600 text-white border-amber-600' : 'bg-white border-slate-300'"
-                      class="h-14 lg:h-12 rounded-xl border-2 font-bold text-lg lg:text-base px-2 truncate hover:border-amber-500" x-text="v.name"></button>
+                      :class="form.vendor_id === v.id ? 'opt-on' : ''"
+                      class="opt truncate" x-text="v.name"></button>
             </template>
           </div>
         </div>
@@ -222,10 +237,10 @@
         <div>
           <div class="flex items-end justify-between">
             <label class="lbl">Quantity sent (kg)</label>
-            <button type="button" x-show="specOut('spec') && specStock('spec') > 0" class="text-sm font-semibold text-slate-700 mb-1.5 px-2"
+            <button type="button" x-show="specOut('spec') && specStock('spec') > 0" class="link mb-1 -mr-2"
                     @click="form.qty = specStock('spec')">All (<span x-text="num(specStock('spec'))"></span>)</button>
           </div>
-          <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.qty" placeholder="0">
+          <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl lg:text-xl font-semibold tracking-tight tabular-nums" x-model="form.qty" placeholder="0">
         </div>
         <div class="grid grid-cols-2 gap-3 lg:contents">
           <div>
@@ -245,10 +260,10 @@
           <label class="lbl">Remarks (optional)</label>
           <input type="text" class="inp" x-model="form.remarks" autocomplete="off">
         </div>
-        <label class="card p-4 flex items-start gap-3 lg:col-span-2">
-          <input type="checkbox" class="mt-1 w-6 h-6 accent-amber-600" x-model="form.is_opening">
-          <span><b>Already with vendor (opening balance)</b><br>
-            <span class="text-sm text-slate-600">Tick only when starting the software, for material that went out before today. Factory stock won't be reduced.</span></span>
+        <label class="card p-4 flex items-start gap-3 cursor-pointer hover:border-stone-300 transition-colors lg:col-span-2">
+          <input type="checkbox" class="mt-0.5 w-5 h-5 shrink-0 accent-ochre-600" x-model="form.is_opening">
+          <span class="leading-snug"><b class="font-semibold">Already with vendor (opening balance)</b><br>
+            <span class="text-sm text-stone-600">Tick only when starting the software, for material that went out before today. Factory stock won't be reduced.</span></span>
         </label>
         <button type="submit" class="btn w-full text-white lg:col-span-2" :class="saveBtn" :disabled="busy" x-text="busy ? 'Saving…' : (editId ? 'Save changes' : 'Save Labour Out')"></button>
       </form>
@@ -259,38 +274,38 @@
       <div>
         <!-- step 1: vendor -->
         <div x-show="lotStep === 'vendor'" class="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
-          <p class="text-slate-600 lg:col-span-3">Which vendor is the material coming back from?</p>
+          <p class="text-[15px] text-stone-600 lg:col-span-3">Which vendor is the material coming back from?</p>
           <template x-for="v in activeVendors" :key="v.id">
-            <button @click="chooseVendor(v)" class="card w-full p-4 flex items-center justify-between text-left active:bg-slate-50 hover:bg-slate-50">
+            <button @click="chooseVendor(v)" class="card tap w-full p-4 flex items-center justify-between text-left hover:border-stone-300">
               <span>
-                <span class="block text-xl font-bold" x-text="v.name"></span>
-                <span class="block text-sm text-slate-500" x-text="lotsFor(v.id).length ? lotsFor(v.id).length + ' open challan(s) · ' + num(pendingFor(v.id)) + ' kg pending' : 'Nothing pending'"></span>
+                <span class="block text-lg font-semibold tracking-tight" x-text="v.name"></span>
+                <span class="block text-sm text-stone-500" x-text="lotsFor(v.id).length ? lotsFor(v.id).length + ' open challan(s) · ' + num(pendingFor(v.id)) + ' kg pending' : 'Nothing pending'"></span>
               </span>
-              <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              <svg class="w-5 h-5 text-stone-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
             </button>
           </template>
         </div>
 
         <!-- step 2: challan -->
         <div x-show="lotStep === 'lots'" class="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-4 lg:items-start">
-          <p class="text-slate-600 lg:col-span-2 xl:col-span-3">Open challans with <b x-text="lotVendor && lotVendor.name"></b>. Pick the one this material belongs to.</p>
+          <p class="text-[15px] text-stone-600 lg:col-span-2 xl:col-span-3">Open challans with <b x-text="lotVendor && lotVendor.name"></b>. Pick the one this material belongs to.</p>
           <template x-for="l in (lotVendor ? lotsFor(lotVendor.id) : [])" :key="l.id">
-            <button @click="chooseLot(l)" class="card w-full p-4 text-left active:bg-slate-50 hover:bg-slate-50">
+            <button @click="chooseLot(l)" class="card tap w-full p-4 text-left hover:border-stone-300">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
-                  <div class="text-lg font-bold truncate" x-text="l.item_name"></div>
-                  <div class="text-sm text-slate-500" x-text="l.challan_no + ' · sent ' + dmy(l.date_out)"></div>
+                  <div class="text-[17px] font-semibold tracking-tight truncate" x-text="l.item_name"></div>
+                  <div class="text-sm text-stone-500" x-text="l.challan_no + ' · sent ' + dmy(l.date_out)"></div>
                 </div>
                 <span class="chip shrink-0" :class="agingClass(l.days_out)" x-text="l.days_out + ' days'"></span>
               </div>
-              <div class="grid grid-cols-3 gap-2 mt-3 text-center">
-                <div class="rounded-lg bg-slate-50 py-2"><div class="text-xs text-slate-500">Sent</div><div class="font-bold tabular-nums" x-text="num(l.qty_out)"></div></div>
-                <div class="rounded-lg bg-slate-50 py-2"><div class="text-xs text-slate-500">Received</div><div class="font-bold tabular-nums" x-text="num(l.recv_in + l.scrap_in)"></div></div>
-                <div class="rounded-lg bg-sky-50 py-2"><div class="text-xs text-sky-700">Pending</div><div class="font-bold tabular-nums text-sky-800" x-text="num(l.pending)"></div></div>
+              <div class="grid grid-cols-3 mt-4 pt-3 border-t border-stone-100 divide-x divide-stone-100">
+                <div class="pr-3"><div class="eyebrow">Sent</div><div class="mt-0.5 font-semibold tabular-nums" x-text="num(l.qty_out)"></div></div>
+                <div class="px-3"><div class="eyebrow">Received</div><div class="mt-0.5 font-semibold tabular-nums" x-text="num(l.recv_in + l.scrap_in)"></div></div>
+                <div class="pl-3"><div class="eyebrow !text-steel-700">Pending</div><div class="mt-0.5 font-semibold tabular-nums text-steel-700" x-text="num(l.pending)"></div></div>
               </div>
             </button>
           </template>
-          <div x-show="lotVendor && !lotsFor(lotVendor.id).length" class="card p-6 text-center text-slate-500 lg:col-span-2 xl:col-span-3">
+          <div x-show="lotVendor && !lotsFor(lotVendor.id).length" class="card p-6 text-center text-stone-500 lg:col-span-2 xl:col-span-3">
             No open challans for this vendor. Make a Labour Out entry first.
           </div>
         </div>
@@ -301,62 +316,62 @@
             <div class="card p-4 lg:col-span-2">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
-                  <div class="text-sm text-slate-500" x-text="lot.vendor_name + ' · ' + lot.challan_no"></div>
-                  <div class="text-lg font-bold truncate" x-text="lot.item_name"></div>
+                  <div class="eyebrow" x-text="lot.vendor_name + ' · ' + lot.challan_no"></div>
+                  <div class="mt-1 text-[17px] font-semibold tracking-tight truncate" x-text="lot.item_name"></div>
                 </div>
-                <button type="button" class="text-sm font-semibold text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100" @click="lotStep = 'lots'">Change</button>
+                <button type="button" class="link -mr-2 shrink-0" @click="lotStep = 'lots'">Change</button>
               </div>
-              <div class="mt-2 text-sm text-slate-600">Sent <b x-text="num(lot.qty_out)"></b> · Received <b x-text="num(lot.recv_in + lot.scrap_in)"></b> · Pending <b class="text-sky-800" x-text="num(lot.pending) + ' kg'"></b></div>
+              <div class="mt-2 text-sm text-stone-600">Sent <b x-text="num(lot.qty_out)"></b> · Received <b x-text="num(lot.recv_in + lot.scrap_in)"></b> · Pending <b class="text-steel-700" x-text="num(lot.pending) + ' kg'"></b></div>
             </div>
           </template>
 
           <div class="card p-4 space-y-4 lg:col-span-2">
-            <div><div class="font-bold text-slate-700">Material received</div>
-              <div class="text-sm text-slate-500">Goes into Finished stock. Change the size if it came back different.</div></div>
+            <div><div class="eyebrow">Material received</div>
+              <div class="text-sm text-stone-500 mt-1">Goes into Finished stock. Change the size if it came back different.</div></div>
             <div data-spec="recv" class="space-y-4"></div>
             <div>
               <label class="lbl">Quantity received (kg)</label>
-              <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.recv_qty" placeholder="0 kg">
+              <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl lg:text-xl font-semibold tracking-tight tabular-nums" x-model="form.recv_qty" placeholder="0 kg">
             </div>
           </div>
 
           <div class="card p-4 space-y-3 lg:col-span-2">
-            <div class="font-bold text-slate-700">Scrap</div>
+            <div class="eyebrow">Scrap</div>
             <div class="grid grid-cols-3 gap-2">
               <template x-for="m in scrapMaterials" :key="m.id">
                 <button type="button" class="opt" :class="form.scrap_material_id === m.id ? 'opt-on' : ''"
                         @click="form.scrap_material_id = form.scrap_material_id === m.id ? null : m.id" x-text="m.name"></button>
               </template>
             </div>
-            <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.scrap_qty" placeholder="0 kg">
+            <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl lg:text-xl font-semibold tracking-tight tabular-nums" x-model="form.scrap_qty" placeholder="0 kg">
           </div>
 
-          <label class="card p-4 flex items-start gap-3">
-            <input type="checkbox" class="mt-1 w-6 h-6 accent-sky-600" x-model="form.close">
-            <span><b>This challan is complete</b><br>
-              <span class="text-sm text-slate-600">Nothing more will come back. Whatever is still pending is counted as burn.</span></span>
+          <label class="card p-4 flex items-start gap-3 cursor-pointer hover:border-stone-300 transition-colors">
+            <input type="checkbox" class="mt-0.5 w-5 h-5 shrink-0 accent-steel-600" x-model="form.close">
+            <span class="leading-snug"><b class="font-semibold">This challan is complete</b><br>
+              <span class="text-sm text-stone-600">Nothing more will come back. Whatever is still pending is counted as burn.</span></span>
           </label>
 
           <!-- live balance -->
           <template x-if="li">
-            <div class="rounded-2xl p-4 border-2"
-                 :class="li.over ? 'border-red-300 bg-red-50' : (li.warn ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white')">
+            <div class="rounded-lg p-4 border shadow-hair text-[15px] space-y-1 tabular-nums"
+                 :class="li.over ? 'border-brick-200 bg-brick-50' : (li.warn ? 'border-ochre-200 bg-ochre-50' : 'border-stone-200 bg-white')">
               <div class="flex justify-between"><span>Pending now</span><b class="tabular-nums" x-text="num(lot.pending)"></b></div>
               <div class="flex justify-between"><span>− Received</span><b class="tabular-nums" x-text="num(li.recv)"></b></div>
               <div class="flex justify-between"><span>− Scrap</span><b class="tabular-nums" x-text="num(li.sc)"></b></div>
-              <div class="border-t border-slate-300 my-2"></div>
+              <div class="border-t border-dashed border-stone-300 !my-2.5"></div>
               <template x-if="li.over">
-                <div class="font-bold text-red-700">More than pending by <span x-text="num(-li.left)"></span> kg. Check the numbers.</div>
+                <div class="font-semibold text-brick-700">More than pending by <span x-text="num(-li.left)"></span> kg. Check the numbers.</div>
               </template>
               <template x-if="!li.over && form.close">
-                <div class="flex justify-between text-lg"><span class="font-bold">Burn</span>
-                  <b class="tabular-nums" :class="li.warn ? 'text-amber-800' : ''" x-text="num(li.burn) + ' kg (' + li.burnPct + '%)'"></b></div>
+                <div class="flex justify-between text-lg"><span class="font-semibold">Burn</span>
+                  <b class="tabular-nums" :class="li.warn ? 'text-ochre-700' : ''" x-text="num(li.burn) + ' kg (' + li.burnPct + '%)'"></b></div>
               </template>
               <template x-if="!li.over && !form.close">
-                <div class="flex justify-between text-lg"><span class="font-bold" x-text="li.closes ? 'Fully received' : 'Still pending'"></span>
+                <div class="flex justify-between text-lg"><span class="font-semibold" x-text="li.closes ? 'Fully received' : 'Still pending'"></span>
                   <b class="tabular-nums" x-text="num(li.left) + ' kg'"></b></div>
               </template>
-              <div x-show="!li.over && form.close && li.warn" class="text-sm text-amber-800 mt-1">Burn is higher than usual. Double-check before saving.</div>
+              <div x-show="!li.over && form.close && li.warn" class="text-sm text-ochre-700 mt-1">Burn is higher than usual. Double-check before saving.</div>
             </div>
           </template>
 
@@ -386,30 +401,30 @@
     <!-- ============ STOCK ============ -->
     <template x-if="route === 'stock'">
       <div class="space-y-3">
-        <div class="grid grid-cols-4 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-lg">
+        <div class="tabs no-scrollbar -mx-4 px-2 lg:mx-0 lg:px-0">
           <template x-for="t in [['RAW','Raw'],['FG','Finished'],['SCRAP','Scrap'],['VENDOR','Vendors']]" :key="t[0]">
-            <button @click="stockTab = t[0]" class="h-11 lg:h-9 rounded-lg" :class="stockTab === t[0] ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900'" x-text="t[1]"></button>
+            <button @click="stockTab = t[0]" class="tab flex-1 lg:flex-none lg:px-4" :class="stockTab === t[0] ? 'tab-on' : ''" x-text="t[1]"></button>
           </template>
         </div>
 
         <div x-show="stockTab !== 'VENDOR'" class="space-y-3">
           <div class="flex gap-2 lg:max-w-xl">
             <input type="search" class="inp h-12 text-base flex-1" placeholder="Search: brass, rod, 63/37, 12 mm…" x-model="stockQ">
-            <button @click="hideZero = !hideZero" class="h-12 px-3 rounded-xl border text-sm font-semibold whitespace-nowrap"
-                    :class="hideZero ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300'"
+            <button @click="hideZero = !hideZero" class="seg h-12 lg:h-11 px-4"
+                    :class="hideZero ? 'seg-on' : ''"
                     x-text="hideZero ? 'In stock' : 'All items'"></button>
           </div>
-          <div class="card divide-y divide-slate-100 lg:hidden">
+          <div class="card divide-y divide-stone-100 lg:hidden">
             <template x-for="i in stockRows" :key="i.id">
-              <button class="w-full p-4 flex items-center justify-between gap-3 text-left active:bg-slate-50 hover:bg-slate-50" @click="openItemLedger(i)">
-                <span class="min-w-0 font-semibold" x-text="i.name"></span>
+              <button class="tap w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left" @click="openItemLedger(i)">
+                <span class="min-w-0 font-medium" x-text="i.name"></span>
                 <span class="text-right whitespace-nowrap">
-                  <span class="text-xl font-bold tabular-nums" :class="i.stock < 0 ? 'text-red-700' : ''" x-text="num(i.stock)"></span>
-                  <span class="text-sm text-slate-500" x-text="i.unit"></span>
+                  <span class="text-lg font-semibold tracking-tight tabular-nums" :class="i.stock < 0 ? 'text-brick-700' : ''" x-text="num(i.stock)"></span>
+                  <span class="text-sm text-stone-500" x-text="i.unit"></span>
                 </span>
               </button>
             </template>
-            <div x-show="!stockRows.length" class="p-6 text-center text-slate-500" x-text="hideZero ? 'Nothing in stock here. Tap “In stock” to see all items.' : 'No items.'"></div>
+            <div x-show="!stockRows.length" class="p-6 text-center text-stone-500" x-text="hideZero ? 'Nothing in stock here. Tap “In stock” to see all items.' : 'No items.'"></div>
           </div>
           <div class="hidden lg:block card overflow-hidden">
             <table class="tbl">
@@ -417,36 +432,36 @@
               <tbody>
                 <template x-for="i in stockRows" :key="i.id">
                   <tr tabindex="0" @click="openItemLedger(i)" @keydown.enter="openItemLedger(i)" title="Open item ledger">
-                    <td class="font-semibold" x-text="i.name"></td>
-                    <td class="text-right whitespace-nowrap"><span class="text-base font-bold tabular-nums" :class="i.stock < 0 ? 'text-red-700' : ''" x-text="num(i.stock)"></span> <span class="text-slate-500" x-text="i.unit"></span></td>
+                    <td class="font-medium" x-text="i.name"></td>
+                    <td class="text-right whitespace-nowrap"><span class="text-base font-semibold tabular-nums" :class="i.stock < 0 ? 'text-brick-700' : ''" x-text="num(i.stock)"></span> <span class="text-stone-500" x-text="i.unit"></span></td>
                   </tr>
                 </template>
               </tbody>
             </table>
-            <div x-show="!stockRows.length" class="p-6 text-center text-slate-500" x-text="hideZero ? 'Nothing in stock here. Click “In stock” to see all items.' : 'No items.'"></div>
+            <div x-show="!stockRows.length" class="p-6 text-center text-stone-500" x-text="hideZero ? 'Nothing in stock here. Click “In stock” to see all items.' : 'No items.'"></div>
           </div>
-          <div class="text-right text-sm text-slate-600 pr-1">Total <b x-text="num(stockTotal(stockTab)) + ' kg'"></b></div>
+          <div class="flex justify-end items-baseline gap-2 text-sm text-stone-500 pr-1"><span class="eyebrow">Total</span><b class="text-[15px] font-semibold text-ink tabular-nums" x-text="num(stockTotal(stockTab)) + ' kg'"></b></div>
         </div>
 
         <div x-show="stockTab === 'VENDOR'" class="space-y-4">
           <div class="card p-4 flex justify-between items-center lg:max-w-sm">
-            <span class="text-slate-600">Total with vendors</span>
-            <b class="text-xl tabular-nums" x-text="num(withVendorTotal) + ' kg'"></b>
+            <span class="eyebrow">Total with vendors</span>
+            <b class="text-xl font-semibold tracking-tight tabular-nums" x-text="num(withVendorTotal) + ' kg'"></b>
           </div>
           <div class="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-5 lg:items-start">
           <template x-for="g in vendorGroups" :key="g.name">
             <div>
-              <div class="flex justify-between px-1 mb-1.5"><b x-text="g.name"></b><span class="text-slate-600 tabular-nums" x-text="num(g.total) + ' kg'"></span></div>
-              <div class="card divide-y divide-slate-100">
+              <div class="flex justify-between items-baseline px-1 mb-2"><b class="font-semibold tracking-tight" x-text="g.name"></b><span class="text-sm font-medium text-stone-500 tabular-nums" x-text="num(g.total) + ' kg'"></span></div>
+              <div class="card divide-y divide-stone-100">
                 <template x-for="l in g.lots" :key="l.id">
-                  <div class="p-3 flex items-center justify-between gap-3">
+                  <div class="px-4 py-3 flex items-center justify-between gap-3">
                     <div class="min-w-0">
-                      <div class="font-semibold truncate" x-text="l.item_name"></div>
-                      <div class="text-sm text-slate-500" x-text="l.challan_no + ' · ' + dmy(l.date_out) + (l.is_opening ? ' · opening' : '')"></div>
+                      <div class="font-medium truncate" x-text="l.item_name"></div>
+                      <div class="text-sm text-stone-500" x-text="l.challan_no + ' · ' + dmy(l.date_out) + (l.is_opening ? ' · opening' : '')"></div>
                     </div>
                     <div class="text-right shrink-0">
-                      <div class="font-bold tabular-nums" x-text="num(l.pending) + ' kg'"></div>
-                      <span class="chip" :class="agingClass(l.days_out)" x-text="l.days_out + 'd'"></span>
+                      <div class="font-semibold tabular-nums" x-text="num(l.pending) + ' kg'"></div>
+                      <span class="chip mt-1" :class="agingClass(l.days_out)" x-text="l.days_out + 'd'"></span>
                     </div>
                   </div>
                 </template>
@@ -454,7 +469,7 @@
             </div>
           </template>
           </div>
-          <div x-show="!vendorGroups.length" class="card p-6 text-center text-slate-500">No material with vendors.</div>
+          <div x-show="!vendorGroups.length" class="card p-6 text-center text-stone-500">No material with vendors.</div>
         </div>
       </div>
     </template>
@@ -464,8 +479,8 @@
       <div class="space-y-3">
         <div class="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1 lg:mx-0 lg:px-0">
           <template x-for="t in [['','All'],['PURCHASE','Purchase'],['LABOUR_OUT','Labour Out'],['LABOUR_IN','Labour In'],['SALE','Sale'],['OPENING','Opening']]" :key="t[0]">
-            <button @click="setLf('entry_type', t[0])" class="chip h-9 px-3 text-sm whitespace-nowrap border"
-                    :class="lf.entry_type === t[0] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 text-slate-700 hover:border-slate-500'" x-text="t[1]"></button>
+            <button @click="setLf('entry_type', t[0])" class="seg"
+                    :class="lf.entry_type === t[0] ? 'seg-on' : ''" x-text="t[1]"></button>
           </template>
         </div>
         <div class="space-y-3 lg:space-y-0 lg:flex lg:gap-2">
@@ -476,27 +491,29 @@
         <input type="search" class="inp h-12 text-base lg:max-w-md" placeholder="Search party, vendor, bill, challan…" :value="lf.q"
                @input.debounce.400ms="setLf('q', $event.target.value)">
         </div>
-        <div x-show="lf.item_id" class="flex items-center justify-between card px-3 py-2">
+        <div x-show="lf.item_id" class="flex items-center justify-between card px-4 py-2">
           <span class="text-sm">Item: <b x-text="itemName(lf.item_id)"></b> · stock <b x-text="stockNow(lf.item_id)"></b></span>
-          <button class="text-sm font-semibold px-2 py-1 rounded-lg hover:bg-slate-100" @click="setLf('item_id', null)">Clear ✕</button>
+          <button class="link -mr-2" @click="setLf('item_id', null)">Clear</button>
         </div>
 
         <div class="space-y-3 lg:hidden">
         <template x-for="g in ledgerGroups" :key="g.date">
           <div>
-            <div class="text-sm font-bold text-slate-500 px-1 mb-1.5" x-text="dmy(g.date)"></div>
-            <div class="card divide-y divide-slate-100">
+            <div class="eyebrow tabular-nums px-1 mb-2" x-text="dmy(g.date)"></div>
+            <div class="card divide-y divide-stone-100">
               <template x-for="e in g.rows" :key="e.id">
-                <button class="w-full text-left p-3 flex items-start gap-3 active:bg-slate-50 hover:bg-slate-50" @click="go('#/entry/' + e.id)">
-                  <span class="chip shrink-0 mt-0.5" :class="TYPES[e.entry_type].badge" x-text="TYPES[e.entry_type].label"></span>
+                <button class="tap w-full text-left px-4 py-3 flex items-start gap-3" @click="go('#/entry/' + e.id)">
                   <span class="flex-1 min-w-0">
-                    <template x-for="l in e.lines"><span class="block font-semibold truncate" x-text="l.item_name"></span></template>
-                    <span x-show="!e.lines.length" class="block font-semibold text-slate-500" x-text="'Challan closed, nothing received'"></span>
-                    <span class="block text-sm text-slate-500 truncate" x-text="[who(e), e.challan_no || e.ref_no].filter(Boolean).join(' · ')"></span>
-                    <span x-show="e.closes_lot" class="block text-sm text-sky-800" x-text="'Closed · burn ' + num(e.burn) + ' kg'"></span>
+                    <template x-for="l in e.lines"><span class="block text-[15px] font-medium truncate" x-text="l.item_name"></span></template>
+                    <span x-show="!e.lines.length" class="block text-[15px] font-medium text-stone-500" x-text="'Challan closed, nothing received'"></span>
+                    <span class="mt-1 flex items-center gap-2 text-[13px] text-stone-500 min-w-0">
+                      <span class="chip shrink-0" :class="TYPES[e.entry_type].badge" x-text="TYPES[e.entry_type].label"></span>
+                      <span class="truncate" x-text="[who(e), e.challan_no || e.ref_no].filter(Boolean).join(' · ')"></span>
+                    </span>
+                    <span x-show="e.closes_lot" class="block mt-1 text-[13px] font-medium text-steel-700" x-text="'Closed · burn ' + num(e.burn) + ' kg'"></span>
                   </span>
-                  <span class="text-right text-sm font-bold tabular-nums whitespace-nowrap">
-                    <template x-for="l in e.lines"><span class="block" :class="l.qty > 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="lineText(l)"></span></template>
+                  <span class="text-right text-[15px] font-semibold tabular-nums whitespace-nowrap">
+                    <template x-for="l in e.lines"><span class="block" :class="l.qty > 0 ? 'text-moss-700' : 'text-brick-700'" x-text="lineText(l)"></span></template>
                   </span>
                 </button>
               </template>
@@ -511,69 +528,69 @@
             <tbody>
               <template x-for="e in ledger" :key="e.id">
                 <tr tabindex="0" @click="go('#/entry/' + e.id)" @keydown.enter="go('#/entry/' + e.id)">
-                  <td class="whitespace-nowrap tabular-nums text-slate-600" x-text="dmy(e.date)"></td>
+                  <td class="whitespace-nowrap tabular-nums text-stone-500" x-text="dmy(e.date)"></td>
                   <td><span class="chip whitespace-nowrap" :class="TYPES[e.entry_type].badge" x-text="TYPES[e.entry_type].label"></span></td>
                   <td>
-                    <template x-for="l in e.lines"><div class="font-semibold" x-text="l.item_name"></div></template>
-                    <div x-show="!e.lines.length" class="font-semibold text-slate-500">Challan closed, nothing received</div>
-                    <div x-show="e.closes_lot" class="text-sky-800" x-text="'Closed · burn ' + num(e.burn) + ' kg'"></div>
+                    <template x-for="l in e.lines"><div class="font-medium" x-text="l.item_name"></div></template>
+                    <div x-show="!e.lines.length" class="font-semibold text-stone-500">Challan closed, nothing received</div>
+                    <div x-show="e.closes_lot" class="text-steel-700" x-text="'Closed · burn ' + num(e.burn) + ' kg'"></div>
                   </td>
                   <td x-text="who(e)"></td>
-                  <td class="text-slate-600" x-text="e.challan_no || e.ref_no || ''"></td>
-                  <td class="text-right font-bold tabular-nums whitespace-nowrap">
-                    <template x-for="l in e.lines"><div :class="l.qty > 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="lineText(l)"></div></template>
+                  <td class="text-stone-600" x-text="e.challan_no || e.ref_no || ''"></td>
+                  <td class="text-right font-semibold tabular-nums whitespace-nowrap">
+                    <template x-for="l in e.lines"><div :class="l.qty > 0 ? 'text-moss-700' : 'text-brick-700'" x-text="lineText(l)"></div></template>
                   </td>
                 </tr>
               </template>
             </tbody>
           </table>
         </div>
-        <div x-show="!ledger.length" class="card p-6 text-center text-slate-500">No entries found.</div>
+        <div x-show="!ledger.length" class="card p-6 text-center text-stone-500">No entries found.</div>
       </div>
     </template>
 
     <!-- ============ ENTRY DETAIL ============ -->
     <template x-if="route === 'entry' && entry">
       <div class="space-y-4 lg:max-w-2xl">
-        <div class="card p-4 space-y-2">
+        <div class="card p-4 lg:p-5 space-y-3">
           <div class="flex items-center justify-between">
             <span class="chip" :class="TYPES[entry.entry_type].badge" x-text="TYPES[entry.entry_type].label"></span>
-            <span class="text-slate-500" x-text="dmy(entry.date)"></span>
+            <span class="text-sm text-stone-500 tabular-nums" x-text="dmy(entry.date)"></span>
           </div>
-          <div x-show="entry.deleted_at" class="rounded-lg bg-red-50 text-red-800 p-2 text-sm font-semibold">Deleted on <span x-text="entry.deleted_at && entry.deleted_at.replace('T', ' ')"></span></div>
-          <dl class="grid grid-cols-3 gap-y-2 text-sm pt-1">
-            <template x-if="entry.party_name"><dt class="text-slate-500">Party</dt></template>
-            <template x-if="entry.party_name"><dd class="col-span-2 font-semibold" x-text="entry.party_name"></dd></template>
-            <template x-if="entry.vendor_name"><dt class="text-slate-500">Vendor</dt></template>
-            <template x-if="entry.vendor_name"><dd class="col-span-2 font-semibold" x-text="entry.vendor_name"></dd></template>
-            <template x-if="entry.challan_no"><dt class="text-slate-500">Challan</dt></template>
-            <template x-if="entry.challan_no"><dd class="col-span-2 font-semibold" x-text="entry.challan_no + (entry.lot_status ? ' (' + entry.lot_status.toLowerCase() + ')' : '')"></dd></template>
-            <template x-if="entry.ref_no && entry.entry_type !== 'LABOUR_OUT'"><dt class="text-slate-500" x-text="entry.entry_type === 'SALE' ? 'Invoice' : (entry.entry_type === 'LABOUR_IN' ? 'Vendor challan' : 'Bill no.')"></dt></template>
-            <template x-if="entry.ref_no && entry.entry_type !== 'LABOUR_OUT'"><dd class="col-span-2 font-semibold" x-text="entry.ref_no"></dd></template>
-            <template x-if="entry.hsn"><dt class="text-slate-500">HSN</dt></template>
-            <template x-if="entry.hsn"><dd class="col-span-2 font-semibold" x-text="entry.hsn"></dd></template>
-            <template x-if="entry.remarks"><dt class="text-slate-500">Remarks</dt></template>
+          <div x-show="entry.deleted_at" class="rounded-md bg-brick-50 text-brick-800 ring-1 ring-inset ring-brick-200 px-3 py-2 text-sm font-medium">Deleted on <span x-text="entry.deleted_at && entry.deleted_at.replace('T', ' ')"></span></div>
+          <dl class="grid grid-cols-3 gap-y-2.5 text-sm pt-3 border-t border-stone-100">
+            <template x-if="entry.party_name"><dt class="text-stone-500">Party</dt></template>
+            <template x-if="entry.party_name"><dd class="col-span-2 font-medium" x-text="entry.party_name"></dd></template>
+            <template x-if="entry.vendor_name"><dt class="text-stone-500">Vendor</dt></template>
+            <template x-if="entry.vendor_name"><dd class="col-span-2 font-medium" x-text="entry.vendor_name"></dd></template>
+            <template x-if="entry.challan_no"><dt class="text-stone-500">Challan</dt></template>
+            <template x-if="entry.challan_no"><dd class="col-span-2 font-medium" x-text="entry.challan_no + (entry.lot_status ? ' (' + entry.lot_status.toLowerCase() + ')' : '')"></dd></template>
+            <template x-if="entry.ref_no && entry.entry_type !== 'LABOUR_OUT'"><dt class="text-stone-500" x-text="entry.entry_type === 'SALE' ? 'Invoice' : (entry.entry_type === 'LABOUR_IN' ? 'Vendor challan' : 'Bill no.')"></dt></template>
+            <template x-if="entry.ref_no && entry.entry_type !== 'LABOUR_OUT'"><dd class="col-span-2 font-medium" x-text="entry.ref_no"></dd></template>
+            <template x-if="entry.hsn"><dt class="text-stone-500">HSN</dt></template>
+            <template x-if="entry.hsn"><dd class="col-span-2 font-medium" x-text="entry.hsn"></dd></template>
+            <template x-if="entry.remarks"><dt class="text-stone-500">Remarks</dt></template>
             <template x-if="entry.remarks"><dd class="col-span-2" x-text="entry.remarks"></dd></template>
           </dl>
         </div>
-        <div class="card divide-y divide-slate-100">
+        <div class="card divide-y divide-stone-100">
           <template x-for="l in entry.lines">
             <div class="p-4 flex items-center justify-between gap-3">
-              <div class="min-w-0 font-semibold" x-text="l.item_name"></div>
-              <div class="text-lg font-bold tabular-nums" :class="l.qty > 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="lineText(l)"></div>
+              <div class="min-w-0 font-medium" x-text="l.item_name"></div>
+              <div class="shrink-0 whitespace-nowrap text-lg font-semibold tracking-tight tabular-nums" :class="l.qty > 0 ? 'text-moss-700' : 'text-brick-700'" x-text="lineText(l)"></div>
             </div>
           </template>
-          <div x-show="entry.is_opening" class="p-4 text-sm text-slate-600">Opening balance with vendor (factory stock not reduced).</div>
-          <div x-show="entry.closes_lot" class="p-4 font-semibold text-sky-800">Closed the challan · burn <span x-text="num(entry.burn) + ' kg'"></span></div>
+          <div x-show="entry.is_opening" class="p-4 text-sm text-stone-600">Opening balance with vendor (factory stock not reduced).</div>
+          <div x-show="entry.closes_lot" class="p-4 font-medium text-steel-700">Closed the challan · burn <span x-text="num(entry.burn) + ' kg'"></span></div>
         </div>
-        <div class="text-xs text-slate-500 px-1 space-y-0.5">
+        <div class="text-xs text-stone-400 px-1 space-y-0.5 tabular-nums">
           <template x-for="h in entry.history"><div x-text="h.action.toLowerCase() + 'd ' + h.at.replace('T', ' ') + (h.by ? ' by ' + h.by : '')"></div></template>
         </div>
         <div class="grid grid-cols-2 gap-3" x-show="canEdit && !entry.deleted_at">
-          <button class="btn bg-white border border-red-300 text-red-700 hover:bg-red-50 hover:brightness-100" @click="deleteEntry(entry)">Delete</button>
+          <button class="btn bg-white border border-stone-300 text-brick-700 shadow-hair hover:bg-brick-50 hover:border-brick-200" @click="deleteEntry(entry)">Delete</button>
           <button class="btn-primary" x-show="entry.entry_type !== 'LABOUR_IN'" @click="editEntry(entry)">Edit</button>
         </div>
-        <p x-show="canEdit && !entry.deleted_at && entry.entry_type === 'LABOUR_IN'" class="text-sm text-slate-500 px-1">To correct a Labour In entry, delete it and enter it again.</p>
+        <p x-show="canEdit && !entry.deleted_at && entry.entry_type === 'LABOUR_IN'" class="text-sm text-stone-500 px-1">To correct a Labour In entry, delete it and enter it again.</p>
       </div>
     </template>
 
@@ -581,12 +598,12 @@
     <template x-if="route === 'reports'">
       <div class="grid gap-3 lg:grid-cols-2 lg:gap-4">
         <template x-for="r in REPORTS" :key="r.key">
-          <button @click="go('#/report/' + r.key)" class="card w-full p-4 lg:p-5 text-left flex items-center justify-between gap-3 active:bg-slate-50 hover:bg-slate-50">
+          <button @click="go('#/report/' + r.key)" class="card tap w-full p-4 lg:p-5 text-left flex items-center justify-between gap-4 hover:border-stone-300">
             <span>
-              <span class="block text-lg font-bold" x-text="r.title"></span>
-              <span class="block text-sm text-slate-500" x-text="r.desc"></span>
+              <span class="block text-[17px] font-semibold tracking-tight" x-text="r.title"></span>
+              <span class="block text-sm text-stone-500 mt-1 leading-snug" x-text="r.desc"></span>
             </span>
-            <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            <svg class="w-5 h-5 text-stone-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
           </button>
         </template>
       </div>
@@ -598,8 +615,8 @@
         <div class="print:hidden space-y-3">
           <div x-show="report.period" class="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 lg:mx-0 lg:px-0">
             <template x-for="p in periods()" :key="p[0]">
-              <button @click="setPeriod(p)" class="chip h-9 px-3 text-sm whitespace-nowrap border"
-                      :class="rep.from === p[1] && rep.to === p[2] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 text-slate-700 hover:border-slate-500'" x-text="p[0]"></button>
+              <button @click="setPeriod(p)" class="seg"
+                      :class="rep.from === p[1] && rep.to === p[2] ? 'seg-on' : ''" x-text="p[0]"></button>
             </template>
           </div>
           <div class="flex flex-wrap gap-2 items-center">
@@ -610,16 +627,16 @@
             <button class="btn-ghost h-12 text-base flex-1 sm:flex-none" @click="window.print()">Print / Save PDF</button>
           </div>
         </div>
-        <p class="text-sm text-slate-600" x-text="(report.period ? 'Period ' + dmy(rep.from) + ' to ' + dmy(rep.to) : 'As on ' + dmy(meta.today)) + ' · Quantities in kg unless shown'"></p>
+        <p class="text-sm text-stone-500" x-text="(report.period ? 'Period ' + dmy(rep.from) + ' to ' + dmy(rep.to) : 'As on ' + dmy(meta.today)) + ' · Quantities in kg unless shown'"></p>
 
-        <div x-show="!rep.data" class="card p-6 text-center text-slate-500">Loading…</div>
+        <div x-show="!rep.data" class="card p-6 text-center text-stone-500">Loading…</div>
         <template x-for="t in (rep.data ? rep.data.tables : [])" :key="t.key">
           <section class="space-y-2 print:break-inside-avoid-page">
             <div class="flex items-end justify-between gap-2 px-1">
-              <h2 class="font-bold text-slate-700" x-text="t.title"></h2>
-              <button x-show="t.rows.length" class="print:hidden text-sm font-semibold text-slate-700 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50" @click="exportCSV(t)">Export CSV</button>
+              <h2 class="eyebrow print:text-ink" x-text="t.title"></h2>
+              <button x-show="t.rows.length" class="print:hidden seg h-8 text-[13px]" @click="exportCSV(t)">Export CSV</button>
             </div>
-            <div class="card overflow-x-auto print:overflow-visible print:rounded-none">
+            <div class="card overflow-x-auto print:overflow-visible print:rounded-none print:shadow-none">
               <table class="tbl rep">
                 <thead><tr>
                   <template x-for="c in t.cols" :key="c[0]"><th class="whitespace-nowrap" :class="['num','pct','days'].includes(c[2]) ? 'text-right' : ''" x-text="c[1]"></th></template>
@@ -628,8 +645,8 @@
                   <template x-for="(r, i) in t.rows" :key="i">
                     <tr>
                       <template x-for="c in t.cols" :key="c[0]">
-                        <td class="whitespace-nowrap" :class="{'text-right tabular-nums': ['num','pct','days'].includes(c[2]), 'font-semibold': c === t.cols[0],
-                                 'text-amber-700 font-bold': c[2] === 'pct' && r[c[0]] > BURN_WARN_PCT, 'text-red-700': c[2] === 'num' && r[c[0]] < 0}">
+                        <td class="whitespace-nowrap" :class="{'text-right tabular-nums': ['num','pct','days'].includes(c[2]), 'font-medium': c === t.cols[0],
+                                 'text-ochre-700 font-semibold': c[2] === 'pct' && r[c[0]] > BURN_WARN_PCT, 'text-brick-700': c[2] === 'num' && r[c[0]] < 0}">
                           <span x-show="c[2] === 'days'" class="chip" :class="agingClass(r[c[0]])" x-text="r[c[0]]"></span>
                           <span x-show="c[2] !== 'days'" x-text="cell(r, c)"></span>
                         </td>
@@ -638,14 +655,14 @@
                   </template>
                 </tbody>
                 <tfoot x-show="t.total && t.rows.length">
-                  <tr class="bg-slate-50 font-bold border-t-2 border-slate-200">
+                  <tr class="bg-stone-50 font-semibold border-t border-stone-300">
                     <template x-for="c in t.cols" :key="c[0]">
                       <td class="whitespace-nowrap" :class="['num','pct','days'].includes(c[2]) ? 'text-right tabular-nums' : ''" x-text="t.total ? cell(t.total, c) : ''"></td>
                     </template>
                   </tr>
                 </tfoot>
               </table>
-              <div x-show="!t.rows.length" class="p-6 text-center text-slate-500">Nothing in this period.</div>
+              <div x-show="!t.rows.length" class="p-6 text-center text-stone-500">Nothing in this period.</div>
             </div>
           </section>
         </template>
@@ -655,32 +672,32 @@
     <!-- ============ MASTERS ============ -->
     <template x-if="route === 'masters'">
       <div class="space-y-3">
-        <div class="grid grid-cols-3 lg:grid-cols-6 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-3xl">
+        <div class="tabs no-scrollbar -mx-4 px-1 lg:mx-0 lg:px-0">
           <template x-for="t in masterTabs" :key="t[0]">
-            <button @click="mtab = t[0]; mq = ''" class="h-11 lg:h-9 rounded-lg" :class="mtab === t[0] ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900'" x-text="t[1]"></button>
+            <button @click="mtab = t[0]; mq = ''" class="tab flex-1 px-1.5 text-[13px] lg:flex-none lg:px-4 lg:text-sm" :class="mtab === t[0] ? 'tab-on' : ''" x-text="t[1]"></button>
           </template>
         </div>
         <div class="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:items-start">
         <div class="space-y-3 lg:col-span-2">
         <div class="flex gap-2">
           <input type="search" class="inp h-12 text-base flex-1" placeholder="Search" x-model="mq">
-          <button x-show="canEdit" class="btn-primary h-12 text-base" @click="editMaster(mtab)">+ Add</button>
+          <button x-show="canEdit" class="btn-primary h-12 lg:h-11 text-base px-4" @click="editMaster(mtab)"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button>
         </div>
-        <div class="card divide-y divide-slate-100 lg:hidden">
+        <div class="card divide-y divide-stone-100 lg:hidden">
           <template x-for="r in masterRows" :key="r.id">
-            <button class="w-full p-3 flex items-center justify-between gap-3 text-left active:bg-slate-50 hover:bg-slate-50" @click="editMaster(mtab, r)">
+            <button class="tap w-full px-4 py-3 flex items-center justify-between gap-3 text-left" @click="editMaster(mtab, r)">
               <span class="min-w-0">
-                <span class="block font-semibold truncate" :class="r.active ? '' : 'text-slate-400 line-through'" x-text="r.name"></span>
-                <span class="block text-sm text-slate-500" x-show="mtab === 'grades'" x-text="mat(r.material_id) && mat(r.material_id).name"></span>
-                <span class="block text-sm text-slate-500" x-show="mtab === 'parties' && (r.gstin || r.phone)" x-text="[r.gstin, r.phone].filter(Boolean).join(' · ')"></span>
-                <span class="block text-sm text-slate-500" x-show="mtab === 'vendors' && r.gstin" x-text="'GSTIN ' + r.gstin"></span>
-                <span class="block text-sm text-slate-500" x-show="mtab === 'users'" x-text="r.role === 'EDITOR' ? 'Editor · can add and change entries' : 'Viewer · can only look'"></span>
+                <span class="block font-medium truncate" :class="r.active ? '' : 'text-stone-400 line-through'" x-text="r.name"></span>
+                <span class="block text-sm text-stone-500" x-show="mtab === 'grades'" x-text="mat(r.material_id) && mat(r.material_id).name"></span>
+                <span class="block text-sm text-stone-500" x-show="mtab === 'parties' && (r.gstin || r.phone)" x-text="[r.gstin, r.phone].filter(Boolean).join(' · ')"></span>
+                <span class="block text-sm text-stone-500" x-show="mtab === 'vendors' && r.gstin" x-text="'GSTIN ' + r.gstin"></span>
+                <span class="block text-sm text-stone-500" x-show="mtab === 'users'" x-text="r.role === 'EDITOR' ? 'Editor · can add and change entries' : 'Viewer · can only look'"></span>
               </span>
-              <span x-show="mtab === 'materials'" class="chip shrink-0" :class="r.is_scrap ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-700'"
+              <span x-show="mtab === 'materials'" class="chip shrink-0" :class="r.is_scrap ? 'bg-ochre-50 text-ochre-800 ring-ochre-200' : 'bg-stone-100 text-stone-600 ring-stone-200'"
                     x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span>
             </button>
           </template>
-          <div x-show="!masterRows.length" class="p-6 text-center text-slate-500">Nothing here yet.</div>
+          <div x-show="!masterRows.length" class="p-6 text-center text-stone-500">Nothing here yet.</div>
         </div>
         <div class="hidden lg:block card overflow-hidden">
           <table class="tbl">
@@ -694,23 +711,23 @@
             <tbody>
               <template x-for="r in masterRows" :key="r.id">
                 <tr tabindex="0" @click="editMaster(mtab, r)" @keydown.enter="editMaster(mtab, r)" :title="canEdit ? 'Edit' : ''">
-                  <td class="font-semibold" :class="r.active ? '' : 'text-slate-400'" x-text="r.name"></td>
-                  <td x-show="mtab === 'materials'"><span class="chip" :class="r.is_scrap ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-700'" x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span></td>
-                  <td x-show="mtab === 'grades'" class="text-slate-600" x-text="mat(r.material_id) && mat(r.material_id).name"></td>
-                  <td x-show="mtab === 'parties' || mtab === 'vendors'" class="text-slate-600" x-text="r.gstin || '—'"></td>
-                  <td x-show="mtab === 'parties'" class="text-slate-600" x-text="r.phone || '—'"></td>
-                  <td x-show="mtab === 'users'"><span class="chip" :class="r.role === 'EDITOR' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'" x-text="r.role === 'EDITOR' ? 'Editor' : 'Viewer'"></span></td>
-                  <td class="text-right"><span class="chip" :class="r.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'" x-text="r.active ? 'Active' : 'Hidden'"></span></td>
+                  <td class="font-medium" :class="r.active ? '' : 'text-stone-400'" x-text="r.name"></td>
+                  <td x-show="mtab === 'materials'"><span class="chip" :class="r.is_scrap ? 'bg-ochre-50 text-ochre-800 ring-ochre-200' : 'bg-stone-100 text-stone-600 ring-stone-200'" x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span></td>
+                  <td x-show="mtab === 'grades'" class="text-stone-600" x-text="mat(r.material_id) && mat(r.material_id).name"></td>
+                  <td x-show="mtab === 'parties' || mtab === 'vendors'" class="text-stone-600" x-text="r.gstin || '—'"></td>
+                  <td x-show="mtab === 'parties'" class="text-stone-600" x-text="r.phone || '—'"></td>
+                  <td x-show="mtab === 'users'"><span class="chip" :class="r.role === 'EDITOR' ? 'bg-ink text-white ring-ink' : 'bg-stone-100 text-stone-600 ring-stone-200'" x-text="r.role === 'EDITOR' ? 'Editor' : 'Viewer'"></span></td>
+                  <td class="text-right"><span class="chip" :class="r.active ? 'bg-moss-50 text-moss-800 ring-moss-200' : 'bg-stone-100 text-stone-500 ring-stone-200'" x-text="r.active ? 'Active' : 'Hidden'"></span></td>
                 </tr>
               </template>
             </tbody>
           </table>
-          <div x-show="!masterRows.length" class="p-6 text-center text-slate-500">Nothing here yet.</div>
+          <div x-show="!masterRows.length" class="p-6 text-center text-stone-500">Nothing here yet.</div>
         </div>
         </div>
-        <div x-show="canEdit" class="card p-4 space-y-2">
-          <div class="font-bold">Backup</div>
-          <p class="text-sm text-slate-600">The app saves an automatic copy every day in the <code>data/backups</code> folder. Download one now to keep on a pen drive or Google Drive.</p>
+        <div x-show="canEdit" class="card p-4 lg:p-5 space-y-3">
+          <div class="eyebrow">Backup</div>
+          <p class="text-sm text-stone-600 leading-relaxed">The app saves an automatic copy every day in the <code class="font-mono text-[12px] bg-stone-100 rounded px-1 py-0.5">data/backups</code> folder. Download one now to keep on a pen drive or Google Drive.</p>
           <a href="/api/backup" class="btn-ghost w-full">Download backup</a>
         </div>
         </div>
@@ -720,18 +737,18 @@
 
   <!-- ============ master edit sheet ============ -->
   <template x-if="medit">
-    <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" @click.self="medit = null" @keydown.escape.window="medit = null">
-      <form class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" @submit.prevent="saveMaster()">
+    <div class="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[2px] flex items-end sm:items-center justify-center" @click.self="medit = null" @keydown.escape.window="medit = null">
+      <form class="bg-white w-full sm:max-w-lg rounded-t-xl sm:rounded-xl shadow-sheet sm:shadow-lift p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 max-h-[90vh] overflow-y-auto" @submit.prevent="saveMaster()">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold" x-text="(medit.id ? 'Edit ' : 'Add ') + masterNoun(medit.kind)"></h3>
-          <button type="button" class="h-10 w-10 grid place-items-center text-2xl text-slate-500 rounded-lg hover:bg-slate-100" @click="medit = null" aria-label="Close">×</button>
+          <h3 class="text-lg font-semibold tracking-tight" x-text="(medit.id ? 'Edit ' : 'Add ') + masterNoun(medit.kind)"></h3>
+          <button type="button" class="h-10 w-10 -mr-2 grid place-items-center text-stone-500 rounded-md hover:bg-stone-100 hover:text-ink" @click="medit = null" aria-label="Close"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
         <div><label class="lbl">Name</label><input class="inp" x-model="medit.data.name" autocomplete="off"></div>
         <template x-if="medit.kind === 'materials'">
-          <label class="card p-4 flex items-start gap-3">
-            <input type="checkbox" class="mt-1 w-6 h-6 accent-orange-600" x-model="medit.data.is_scrap">
-            <span><b>This is scrap</b><br>
-              <span class="text-sm text-slate-600">Scrap is picked by material only: no type, grade or size.</span></span>
+          <label class="card p-4 flex items-start gap-3 cursor-pointer hover:border-stone-300 transition-colors">
+            <input type="checkbox" class="mt-0.5 w-5 h-5 shrink-0 accent-ink" x-model="medit.data.is_scrap">
+            <span class="leading-snug"><b class="font-semibold">This is scrap</b><br>
+              <span class="text-sm text-stone-600">Scrap is picked by material only: no type, grade or size.</span></span>
           </label>
         </template>
         <template x-if="medit.kind === 'grades'">
@@ -760,10 +777,10 @@
               <label class="lbl">Access</label>
               <div class="grid grid-cols-2 gap-2">
                 <template x-for="r in [['EDITOR','Editor','Add, edit, delete'],['VIEWER','Viewer','Only look']]" :key="r[0]">
-                  <button type="button" @click="medit.data.role = r[0]" class="h-16 rounded-xl border-2 px-2"
-                          :class="medit.data.role === r[0] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300'">
-                    <span class="block font-bold" x-text="r[1]"></span>
-                    <span class="block text-xs opacity-75" x-text="r[2]"></span>
+                  <button type="button" @click="medit.data.role = r[0]" class="opt h-16"
+                          :class="medit.data.role === r[0] ? 'opt-on' : ''">
+                    <span class="block font-semibold" x-text="r[1]"></span>
+                    <span class="block text-xs font-normal opacity-70 mt-0.5" x-text="r[2]"></span>
                   </button>
                 </template>
               </div>
@@ -775,8 +792,8 @@
           </div>
         </template>
         <label x-show="medit.id" class="flex items-center gap-3">
-          <input type="checkbox" class="w-6 h-6" x-model="medit.data.active">
-          <span>Active <span class="text-sm text-slate-500" x-text="medit.kind === 'users' ? '(untick to stop this person logging in; history stays)' : '(untick to hide from dropdowns; history stays)'"></span></span>
+          <input type="checkbox" class="w-5 h-5 shrink-0 accent-ink" x-model="medit.data.active">
+          <span>Active <span class="text-sm text-stone-500" x-text="medit.kind === 'users' ? '(untick to stop this person logging in; history stays)' : '(untick to hide from dropdowns; history stays)'"></span></span>
         </label>
         <button type="submit" class="btn-primary w-full" :disabled="busy" x-text="busy ? 'Saving…' : 'Save'"></button>
       </form>
@@ -784,18 +801,18 @@
   </template>
 
   <!-- ============ picker sheet ============ -->
-  <div x-show="sheet.open" x-cloak class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" @click.self="closeSheet()" @keydown.escape.window="closeSheet()">
-    <div class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl h-[85vh] sm:h-[75vh] flex flex-col">
-      <div class="p-4 pb-2 space-y-3 border-b border-slate-100">
+  <div x-show="sheet.open" x-cloak class="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[2px] flex items-end sm:items-center justify-center" @click.self="closeSheet()" @keydown.escape.window="closeSheet()">
+    <div class="bg-white w-full sm:max-w-lg rounded-t-xl sm:rounded-xl shadow-sheet sm:shadow-lift h-[85vh] sm:h-[75vh] flex flex-col overflow-hidden">
+      <div class="px-5 pt-4 pb-3 space-y-3 border-b border-stone-200">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold" x-text="sheet.adding ? 'Add new party' : sheet.title"></h3>
-          <button class="h-10 w-10 grid place-items-center text-2xl text-slate-500 rounded-lg hover:bg-slate-100" @click="closeSheet()" aria-label="Close">×</button>
+          <h3 class="text-lg font-semibold tracking-tight" x-text="sheet.adding ? 'Add new party' : sheet.title"></h3>
+          <button class="h-10 w-10 -mr-2 grid place-items-center text-stone-500 rounded-md hover:bg-stone-100 hover:text-ink" @click="closeSheet()" aria-label="Close"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
         <input x-show="!sheet.adding" id="sheet-q" type="search" class="inp h-12 text-base" placeholder="Type to search" x-model="sheet.q" autocomplete="off" @keydown.enter.prevent="pickFirst()">
       </div>
 
       <!-- add party form -->
-      <form x-show="sheet.adding && sheet.addParty" class="p-4 space-y-4 overflow-y-auto" @submit.prevent="saveNewParty()">
+      <form x-show="sheet.adding && sheet.addParty" class="p-5 space-y-4 overflow-y-auto" @submit.prevent="saveNewParty()">
         <div><label class="lbl">Party name</label><input class="inp" x-model="sheet.party.name" autocomplete="off"></div>
         <div><label class="lbl">GSTIN (optional)</label><input class="inp uppercase" x-model="sheet.party.gstin" autocomplete="off"></div>
         <div><label class="lbl">Phone (optional)</label><input class="inp" x-model="sheet.party.phone" inputmode="tel" autocomplete="off"></div>
@@ -806,64 +823,68 @@
       </form>
 
       <div x-show="!sheet.adding" class="flex-1 overflow-y-auto overscroll-contain">
-        <button x-show="sheet.addParty" @click="startAddParty()" class="w-full p-4 text-left font-bold text-emerald-700 border-b border-slate-100 active:bg-emerald-50 hover:bg-emerald-50"
+        <button x-show="sheet.addParty" @click="startAddParty()" class="w-full px-5 py-4 text-left font-semibold text-moss-700 border-b border-stone-100 active:bg-moss-50 hover:bg-moss-50 transition-colors"
                 x-text="sheet.q.trim() ? '+ Add “' + sheet.q.trim() + '” as new party' : '+ Add new party'"></button>
         <template x-for="g in sheet.groups" :key="g">
           <div x-show="sheetGroup(g).length">
-            <div x-show="g" class="sticky top-0 bg-slate-50 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-500" x-text="ITEM_TYPES[g]"></div>
+            <div x-show="g" class="eyebrow sticky top-0 bg-stone-50/95 backdrop-blur px-5 py-2 border-b border-stone-100" x-text="ITEM_TYPES[g]"></div>
             <template x-for="o in sheetGroup(g)" :key="o.id">
-              <button @click="pickOption(o)" class="w-full px-4 py-3 flex items-center justify-between gap-3 text-left border-b border-slate-100 active:bg-slate-100 hover:bg-slate-50">
+              <button @click="pickOption(o)" class="tap w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left border-b border-stone-100">
                 <span class="min-w-0">
-                  <span class="block font-semibold" x-text="o.label"></span>
-                  <span class="block text-sm text-slate-500" x-show="o.sub" x-text="o.sub"></span>
+                  <span class="block font-medium" x-text="o.label"></span>
+                  <span class="block text-sm text-stone-500" x-show="o.sub" x-text="o.sub"></span>
                 </span>
-                <span class="text-sm font-semibold text-slate-600 tabular-nums whitespace-nowrap" x-show="o.right" x-text="o.right"></span>
+                <span class="text-sm font-medium text-stone-500 tabular-nums whitespace-nowrap" x-show="o.right" x-text="o.right"></span>
               </button>
             </template>
           </div>
         </template>
-        <div x-show="!sheetOptions.length" class="p-6 text-center text-slate-500" x-text="sheet.empty"></div>
+        <div x-show="!sheetOptions.length" class="p-6 text-center text-stone-500" x-text="sheet.empty"></div>
       </div>
     </div>
   </div>
 
   <!-- ============ login / first-time setup ============ -->
-  <div x-show="ready && !auth.me" x-cloak class="fixed inset-0 z-50 bg-slate-100 overflow-y-auto">
+  <div x-show="ready && !auth.me" x-cloak class="fixed inset-0 z-50 bg-paper overflow-y-auto">
     <div class="min-h-full flex flex-col items-center justify-center px-4 py-10">
-      <form class="w-full max-w-sm space-y-5" @submit.prevent="doLogin()">
-        <div class="text-center">
-          <img src="icon.svg" alt="" class="w-14 h-14 mx-auto mb-3 rounded-2xl">
-          <h1 class="text-2xl font-bold">Stock Ledger</h1>
-          <p class="text-slate-600" x-text="auth.setup_needed ? 'First-time setup' : 'Who is using the app?'"></p>
+      <form class="w-full max-w-sm space-y-6" @submit.prevent="doLogin()">
+        <div class="flex items-center gap-3">
+          <img src="icon.svg" alt="" class="w-11 h-11 rounded-md">
+          <div>
+            <h1 class="text-xl font-semibold tracking-tight leading-6">Stock Ledger</h1>
+            <p class="text-sm text-stone-500" x-text="auth.setup_needed ? 'First-time setup' : 'Who is using the app?'"></p>
+          </div>
         </div>
 
-        <template x-if="auth.setup_needed">
-          <div class="card p-5 space-y-4">
-            <p class="text-sm text-slate-600">Create the first <b>editor</b> account. You can add the other people from Masters → Users after this.</p>
-            <div><label class="lbl">Setup code</label><input class="inp uppercase tracking-widest font-bold" x-model="login.code" autocomplete="off" maxlength="20">
-              <p class="text-xs text-slate-500 mt-1">Shown in the window where the app was started (start.bat / start.sh).</p></div>
-            <div><label class="lbl">Your name</label><input class="inp" x-model="login.name" autocomplete="name"></div>
-            <div><label class="lbl">Choose a password</label>
-              <input type="password" class="inp" x-model="login.password" autocomplete="new-password" placeholder="At least 4 characters"></div>
-          </div>
-        </template>
+        <div class="card p-5 space-y-5">
+          <template x-if="auth.setup_needed">
+            <div class="space-y-4">
+              <p class="text-sm text-stone-600 leading-relaxed">Create the first <b class="font-semibold text-ink">editor</b> account. You can add the other people from Masters → Users after this.</p>
+              <div><label class="lbl">Setup code</label><input class="inp uppercase tracking-[0.3em] font-semibold tabular-nums" x-model="login.code" autocomplete="off" maxlength="20">
+                <p class="text-xs text-stone-500 mt-1.5">Shown in the window where the app was started (start.bat / start.sh).</p></div>
+              <div><label class="lbl">Your name</label><input class="inp" x-model="login.name" autocomplete="name"></div>
+              <div><label class="lbl">Choose a password</label>
+                <input type="password" class="inp" x-model="login.password" autocomplete="new-password" placeholder="At least 4 characters"></div>
+            </div>
+          </template>
 
-        <template x-if="!auth.setup_needed">
-          <div class="grid grid-cols-2 gap-2">
-            <template x-for="u in auth.users" :key="u.id">
-              <button type="button" @click="pickLogin(u)" class="h-16 rounded-xl border-2 font-bold text-lg px-2 truncate"
-                      :class="login.user_id === u.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:border-slate-500'" x-text="u.name"></button>
-            </template>
-          </div>
-        </template>
+          <template x-if="!auth.setup_needed">
+            <div class="grid grid-cols-2 gap-2">
+              <template x-for="u in auth.users" :key="u.id">
+                <button type="button" @click="pickLogin(u)" class="opt h-16 text-lg truncate"
+                        :class="login.user_id === u.id ? 'opt-on' : ''" x-text="u.name"></button>
+              </template>
+            </div>
+          </template>
 
-        <div x-show="!auth.setup_needed && login.user_id">
-          <label class="lbl" for="login-pw" x-text="'Password for ' + login.name"></label>
-          <input id="login-pw" type="password" class="inp" x-model="login.password" autocomplete="current-password">
+          <div x-show="!auth.setup_needed && login.user_id">
+            <label class="lbl" for="login-pw" x-text="'Password for ' + login.name"></label>
+            <input id="login-pw" type="password" class="inp" x-model="login.password" autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn-primary w-full" :disabled="busy || (!auth.setup_needed && !login.user_id)"
+                  x-text="busy ? 'Please wait…' : (auth.setup_needed ? 'Create and log in' : 'Log in')"></button>
         </div>
-        <button type="submit" class="btn-primary w-full" :disabled="busy || (!auth.setup_needed && !login.user_id)"
-                x-text="busy ? 'Please wait…' : (auth.setup_needed ? 'Create and log in' : 'Log in')"></button>
-        <p x-show="!auth.setup_needed" class="text-center text-sm text-slate-500">Forgot your password? Ask an editor to set a new one.</p>
+        <p x-show="!auth.setup_needed" class="text-center text-sm text-stone-500">Forgot your password? Ask an editor to set a new one.</p>
       </form>
     </div>
   </div>
@@ -874,7 +895,7 @@
     <div>
       <div class="flex items-end justify-between">
         <label class="lbl">Material</label>
-        <button type="button" x-show="specOut('$K')" class="text-sm font-semibold text-slate-700 mb-1.5 px-2" @click="pickFromStock('$K')">Pick from stock list</button>
+        <button type="button" x-show="specOut('$K')" class="link mb-1 -mr-2" @click="pickFromStock('$K')">Pick from stock list</button>
       </div>
       <div class="grid grid-cols-3 gap-2">
         <template x-for="m in specMaterials('$K')" :key="m.id">
@@ -912,11 +933,11 @@
           <label class="lbl">Size</label>
           <input type="text" class="inp lg:max-w-sm" x-model="form.$K.size" placeholder="e.g. 12 mm or 25 x 3" autocomplete="off" maxlength="40">
           <div x-show="sizeChips('$K').length" class="mt-2">
-            <div class="text-xs text-slate-500 mb-1" x-text="specOut('$K') ? 'In stock, tap one:' : 'Used before, tap to reuse:'"></div>
+            <div class="text-xs text-stone-500 mb-1" x-text="specOut('$K') ? 'In stock, tap one:' : 'Used before, tap to reuse:'"></div>
             <div class="flex flex-wrap gap-2">
               <template x-for="i in sizeChips('$K')" :key="i.id">
-                <button type="button" class="h-10 px-3 rounded-full border text-sm font-semibold"
-                        :class="sizeKey(form.$K.size) === i.size_key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:border-slate-500'"
+                <button type="button" class="seg h-10 font-semibold tabular-nums"
+                        :class="sizeKey(form.$K.size) === i.size_key ? 'seg-on' : ''"
                         @click="form.$K.size = i.size">
                   <span x-text="i.size || 'No size'"></span><span x-show="specOut('$K')" class="font-normal" x-text="' · ' + num(available(i.id)) + ' ' + i.unit"></span>
                 </button>
@@ -927,24 +948,24 @@
       </div>
     </template>
     <template x-if="specOut('$K') && !specMissing('$K')">
-      <div class="text-sm font-semibold" :class="specStatus('$K').warn ? 'text-red-700' : 'text-slate-600'" x-text="specStatus('$K').text"></div>
+      <div class="text-sm font-semibold" :class="specStatus('$K').warn ? 'text-brick-700' : 'text-stone-600'" x-text="specStatus('$K').text"></div>
     </template>
   </template>
 
   <!-- ============ toast ============ -->
   <div x-show="toast" x-cloak x-transition.opacity class="print:hidden fixed inset-x-0 bottom-24 lg:bottom-8 lg:left-60 z-50 flex justify-center px-4 pointer-events-none">
-    <div class="max-w-md rounded-xl px-4 py-3 shadow-lg font-semibold pointer-events-auto"
-         :class="toast && toast.kind === 'err' ? 'bg-red-700 text-white' : 'bg-slate-900 text-white'"
+    <div class="max-w-md rounded-md px-4 py-3 shadow-lift text-[15px] font-medium pointer-events-auto"
+         :class="toast && toast.kind === 'err' ? 'bg-brick-700 text-white' : 'bg-ink text-white'"
          x-text="toast && toast.msg" @click="toast = null"></div>
   </div>
 
   <!-- ============ bottom nav (phone) ============ -->
-  <nav class="lg:hidden print:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
+  <nav class="lg:hidden print:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-stone-200 pb-[env(safe-area-inset-bottom)]">
     <div class="mx-auto max-w-2xl grid grid-cols-5">
       <template x-for="n in NAV" :key="n[0]">
-        <button @click="nav(n)" class="h-16 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold"
-                :class="navOn(n) ? 'text-slate-900' : 'text-slate-400'">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" viewBox="0 0 24 24"><path :d="n[3]"/></svg>
+        <button @click="nav(n)" class="relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-medium tracking-wide transition-colors"
+                :class="navOn(n) ? 'text-ink before:absolute before:top-0 before:inset-x-5 before:h-[3px] before:rounded-b before:bg-copper-500' : 'text-stone-400 active:text-stone-600'">
+          <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" :stroke-width="navOn(n) ? 2 : 1.6" stroke-linejoin="round" stroke-linecap="round" viewBox="0 0 24 24"><path :d="n[3]"/></svg>
           <span x-text="n[2]"></span>
         </button>
       </template>

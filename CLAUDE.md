@@ -9,6 +9,7 @@ Local stock ledger for a copper/brass manufacturer. FastAPI + SQLite (SQLModel) 
 - Renaming a material/type/grade must call `refresh_item_names()` (`_commit_master` does).
 - index.html has one Material/Type/Grade/Size block (`#spec-tpl`); `stampSpecBlocks()` copies it into each `<div data-spec="spec|recv">` before Alpine starts.
 - Users are factory staff on phones: big tap targets, pickers over typing, plain-English errors.
+- Look: warm neutrals (`paper` background, `stone-*` greys, `ink` for text/primary/selected), hairline borders, `rounded-md` controls and `rounded-lg` cards, `font-semibold` at most. Each entry type has one muted colour (`moss` Purchase, `ochre` Labour Out, `steel` Labour In, `brick` Sale; set in `TYPES` in app.js, palette in tailwind.config.js) used only for its tag, icon and save button, never whole blocks. `copper` is the brand accent (logo, active nav). Reuse the components in styles/input.css (`.card .opt .seg .tab .chip .eyebrow .link`) before adding one-off classes.
 - After changing classes in static/*, rebuild CSS: `npx tailwindcss@3 -i styles/input.css -o static/app.css --minify`
 - Tests: `.venv/bin/python -m pytest -q tests` (needs pytest + httpx; uses a temp STOCK_DATA_DIR shared by all test files, so assert on your own rows, not global counts).
 - Single process only (WRITE_LOCK, login lockout and SETUP_CODE are in memory). Deps are pinned in requirements.txt.
