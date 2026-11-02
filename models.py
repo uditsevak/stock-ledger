@@ -1,5 +1,8 @@
 """Database tables.
 
+A stock line (`Item`) is one Material + Type + Grade + Size, created the first
+time an entry uses it. Scrap materials have no type, grade or size.
+
 Stock is never stored. It is always SUM(movement.qty) over non-deleted entries,
 so the numbers can't drift. Every entry (purchase, sale, labour out/in, opening)
 is one row in `entry` plus one or more signed rows in `movement`.
@@ -12,10 +15,9 @@ from sqlmodel import Field, SQLModel
 
 
 class ItemType:
-    RAW = "RAW"
-    FG = "FG"
-    SCRAP = "SCRAP"
-    ALL = (RAW, FG, SCRAP)
+    RAW = "RAW"      # metal (Brass, Copper, Cu/Ni)
+    SCRAP = "SCRAP"  # material marked is_scrap
+    ALL = (RAW, SCRAP)
 
 
 class EntryType:
@@ -42,13 +44,40 @@ def now() -> datetime:
     return datetime.now()
 
 
-class Item(SQLModel, table=True):
+class Material(SQLModel, table=True):
+    """Brass, Copper, Cu/Ni, and their scraps."""
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
-    hsn: str = ""
-    type: str = ItemType.RAW  # RAW / FG / SCRAP
-    unit: str = "kg"
+    is_scrap: bool = False  # scrap has no type, grade or size
     active: bool = True
+
+
+class Shape(SQLModel, table=True):
+    """Called "Type" on screen: Tube, Rod, Sheet, Strip."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    active: bool = True
+
+
+class Grade(SQLModel, table=True):
+    """Grades belong to one material (Brass 63/37, Copper DHP, ...)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    material_id: int = Field(foreign_key="material.id", index=True)
+    name: str
+    active: bool = True
+
+
+class Item(SQLModel, table=True):
+    """One stock line. Made automatically from what an entry picks; never typed in."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    material_id: int = Field(foreign_key="material.id", index=True)
+    shape_id: Optional[int] = Field(default=None, foreign_key="shape.id")
+    grade_id: Optional[int] = Field(default=None, foreign_key="grade.id")
+    size: str = ""  # as first typed, e.g. "12 mm"
+    size_key: str = ""  # for matching: lower case, no spaces ("12mm")
+    name: str = Field(index=True)  # "Brass Rod · 63/37 · 12 mm", rebuilt when a master is renamed
+    type: str = ItemType.RAW  # RAW / SCRAP, follows the material
+    unit: str = "kg"
 
 
 class Party(SQLModel, table=True):
@@ -77,6 +106,7 @@ class Entry(SQLModel, table=True):
     vendor_id: Optional[int] = Field(default=None, foreign_key="vendor.id")
     lot_id: Optional[int] = Field(default=None, foreign_key="labourlot.id", index=True)
     ref_no: str = ""  # bill no. / invoice no. / challan no.
+    hsn: str = ""  # typed on each entry
     remarks: str = ""
     created_at: NaiveDatetime = Field(default_factory=now)
     updated_at: Optional[NaiveDatetime] = None
@@ -89,7 +119,7 @@ class Movement(SQLModel, table=True):
     entry_id: int = Field(foreign_key="entry.id", index=True)
     item_id: int = Field(foreign_key="item.id", index=True)
     qty: float
-    role: str = ""  # IN / OUT / FG / SCRAP
+    role: str = ""  # IN / OUT / RECV (labour in, metal) / SCRAP
 
 
 class LabourLot(SQLModel, table=True):

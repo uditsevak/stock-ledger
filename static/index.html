@@ -172,17 +172,6 @@
           <label class="lbl">Date</label>
           <input type="date" class="inp" x-model="form.date" :max="meta.today">
         </div>
-        <div>
-          <label class="lbl" x-text="route === 'sale' ? 'Item sold' : 'Material'"></label>
-          <button type="button" class="pick" @click="pickItem('item_id', route === 'sale' ? {filter:'instock', prefer:'FG', title:'Select item to sell'} : {})">
-            <span x-show="!form.item_id" class="text-slate-400"><span class="lg:hidden">Tap</span><span class="hidden lg:inline">Click</span> to select</span>
-            <span x-show="form.item_id" class="min-w-0">
-              <span class="block font-semibold text-lg truncate" x-text="itemName(form.item_id)"></span>
-              <span class="block text-sm text-slate-500" x-text="item(form.item_id) && ('HSN ' + (item(form.item_id).hsn || '—') + ' · In stock ' + num(available(form.item_id)) + ' ' + item(form.item_id).unit)"></span>
-            </span>
-            <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-          </button>
-        </div>
         <div x-show="route !== 'opening'">
           <label class="lbl" x-text="route === 'sale' ? 'Sold to (party)' : 'Purchased from (party)'"></label>
           <button type="button" class="pick" @click="pickParty('party_id')">
@@ -191,17 +180,22 @@
             <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
           </button>
         </div>
+        <div data-spec="spec" class="space-y-4 lg:col-span-2"></div>
         <div>
           <div class="flex items-end justify-between">
-            <label class="lbl">Quantity <span class="font-normal" x-text="item(form.item_id) ? '(' + item(form.item_id).unit + ')' : '(kg)'"></span></label>
-            <button type="button" x-show="route === 'sale' && form.item_id" class="text-sm font-semibold text-slate-700 mb-1.5 px-2"
-                    @click="form.qty = available(form.item_id)">All (<span x-text="num(available(form.item_id))"></span>)</button>
+            <label class="lbl">Quantity <span class="font-normal" x-text="'(' + specUnit('spec') + ')'"></span></label>
+            <button type="button" x-show="route === 'sale' && specStock('spec') > 0" class="text-sm font-semibold text-slate-700 mb-1.5 px-2"
+                    @click="form.qty = specStock('spec')">All (<span x-text="num(specStock('spec'))"></span>)</button>
           </div>
           <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.qty" placeholder="0">
         </div>
         <div x-show="route !== 'opening'">
           <label class="lbl" x-text="route === 'sale' ? 'Invoice no. (optional)' : 'Bill no. (optional)'"></label>
           <input type="text" class="inp" x-model="form.ref_no" autocomplete="off">
+        </div>
+        <div>
+          <label class="lbl">HSN (optional)</label>
+          <input type="text" class="inp" x-model="form.hsn" inputmode="numeric" autocomplete="off">
         </div>
         <div>
           <label class="lbl">Remarks (optional)</label>
@@ -224,22 +218,12 @@
             </template>
           </div>
         </div>
-        <div>
-          <label class="lbl">Material sent</label>
-          <button type="button" class="pick" @click="pickItem('item_id', form.is_opening ? {} : {filter:'instock', prefer:'RAW'})">
-            <span x-show="!form.item_id" class="text-slate-400"><span class="lg:hidden">Tap</span><span class="hidden lg:inline">Click</span> to select</span>
-            <span x-show="form.item_id" class="min-w-0">
-              <span class="block font-semibold text-lg truncate" x-text="itemName(form.item_id)"></span>
-              <span class="block text-sm text-slate-500" x-text="item(form.item_id) && ('In stock ' + num(available(form.item_id)) + ' ' + item(form.item_id).unit)"></span>
-            </span>
-            <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-          </button>
-        </div>
+        <div data-spec="spec" class="space-y-4 lg:col-span-2"></div>
         <div>
           <div class="flex items-end justify-between">
             <label class="lbl">Quantity sent (kg)</label>
-            <button type="button" x-show="form.item_id && !form.is_opening" class="text-sm font-semibold text-slate-700 mb-1.5 px-2"
-                    @click="form.qty = available(form.item_id)">All (<span x-text="num(available(form.item_id))"></span>)</button>
+            <button type="button" x-show="specOut('spec') && specStock('spec') > 0" class="text-sm font-semibold text-slate-700 mb-1.5 px-2"
+                    @click="form.qty = specStock('spec')">All (<span x-text="num(specStock('spec'))"></span>)</button>
           </div>
           <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.qty" placeholder="0">
         </div>
@@ -253,7 +237,11 @@
             <input type="date" class="inp" x-model="form.date" :max="meta.today">
           </div>
         </div>
-        <div class="lg:col-span-2">
+        <div>
+          <label class="lbl">HSN (optional)</label>
+          <input type="text" class="inp" x-model="form.hsn" inputmode="numeric" autocomplete="off">
+        </div>
+        <div>
           <label class="lbl">Remarks (optional)</label>
           <input type="text" class="inp" x-model="form.remarks" autocomplete="off">
         </div>
@@ -297,7 +285,7 @@
               </div>
               <div class="grid grid-cols-3 gap-2 mt-3 text-center">
                 <div class="rounded-lg bg-slate-50 py-2"><div class="text-xs text-slate-500">Sent</div><div class="font-bold tabular-nums" x-text="num(l.qty_out)"></div></div>
-                <div class="rounded-lg bg-slate-50 py-2"><div class="text-xs text-slate-500">Received</div><div class="font-bold tabular-nums" x-text="num(l.fg_in + l.scrap_in)"></div></div>
+                <div class="rounded-lg bg-slate-50 py-2"><div class="text-xs text-slate-500">Received</div><div class="font-bold tabular-nums" x-text="num(l.recv_in + l.scrap_in)"></div></div>
                 <div class="rounded-lg bg-sky-50 py-2"><div class="text-xs text-sky-700">Pending</div><div class="font-bold tabular-nums text-sky-800" x-text="num(l.pending)"></div></div>
               </div>
             </button>
@@ -318,33 +306,28 @@
                 </div>
                 <button type="button" class="text-sm font-semibold text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100" @click="lotStep = 'lots'">Change</button>
               </div>
-              <div class="mt-2 text-sm text-slate-600">Sent <b x-text="num(lot.qty_out)"></b> · Received <b x-text="num(lot.fg_in + lot.scrap_in)"></b> · Pending <b class="text-sky-800" x-text="num(lot.pending) + ' kg'"></b></div>
+              <div class="mt-2 text-sm text-slate-600">Sent <b x-text="num(lot.qty_out)"></b> · Received <b x-text="num(lot.recv_in + lot.scrap_in)"></b> · Pending <b class="text-sky-800" x-text="num(lot.pending) + ' kg'"></b></div>
             </div>
           </template>
 
-          <div class="space-y-4 lg:space-y-0 lg:contents">
-          <div class="card p-4 space-y-3">
-            <div class="font-bold text-slate-700">Finished goods</div>
-            <button type="button" class="pick" @click="pickItem('fg_item_id', {prefer:'FG', title:'Select finished item'})">
-              <span x-show="!form.fg_item_id" class="text-slate-400"><span class="lg:hidden">Tap</span><span class="hidden lg:inline">Click</span> to select finished item</span>
-              <span x-show="form.fg_item_id" class="font-semibold truncate" x-text="itemName(form.fg_item_id)"></span>
-              <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-            </button>
-            <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.fg_qty" placeholder="0 kg">
+          <div class="card p-4 space-y-4 lg:col-span-2">
+            <div class="font-bold text-slate-700">Material received</div>
+            <div data-spec="recv" class="space-y-4"></div>
+            <div>
+              <label class="lbl">Quantity received (kg)</label>
+              <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.recv_qty" placeholder="0 kg">
+            </div>
           </div>
 
-          <div class="card p-4 space-y-3">
+          <div class="card p-4 space-y-3 lg:col-span-2">
             <div class="font-bold text-slate-700">Scrap</div>
-            <button type="button" class="pick" @click="pickItem('scrap_item_id', {prefer:'SCRAP', title:'Select scrap item'})">
-              <span x-show="!form.scrap_item_id" class="text-slate-400"><span class="lg:hidden">Tap</span><span class="hidden lg:inline">Click</span> to select scrap item</span>
-              <span x-show="form.scrap_item_id" class="min-w-0">
-                <span class="block font-semibold truncate" x-text="itemName(form.scrap_item_id)"></span>
-                <span class="block text-sm text-slate-500" x-text="item(form.scrap_item_id) && ('HSN ' + (item(form.scrap_item_id).hsn || '—'))"></span>
-              </span>
-              <svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-            </button>
+            <div class="grid grid-cols-3 gap-2">
+              <template x-for="m in scrapMaterials" :key="m.id">
+                <button type="button" class="opt" :class="form.scrap_material_id === m.id ? 'opt-on' : ''"
+                        @click="form.scrap_material_id = form.scrap_material_id === m.id ? null : m.id" x-text="m.name"></button>
+              </template>
+            </div>
             <input type="number" step="any" min="0" inputmode="decimal" class="inp text-2xl font-bold tabular-nums" x-model="form.scrap_qty" placeholder="0 kg">
-          </div>
           </div>
 
           <label class="card p-4 flex items-start gap-3">
@@ -358,7 +341,7 @@
             <div class="rounded-2xl p-4 border-2"
                  :class="li.over ? 'border-red-300 bg-red-50' : (li.warn ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white')">
               <div class="flex justify-between"><span>Pending now</span><b class="tabular-nums" x-text="num(lot.pending)"></b></div>
-              <div class="flex justify-between"><span>− Finished</span><b class="tabular-nums" x-text="num(li.fg)"></b></div>
+              <div class="flex justify-between"><span>− Received</span><b class="tabular-nums" x-text="num(li.recv)"></b></div>
               <div class="flex justify-between"><span>− Scrap</span><b class="tabular-nums" x-text="num(li.sc)"></b></div>
               <div class="border-t border-slate-300 my-2"></div>
               <template x-if="li.over">
@@ -386,7 +369,11 @@
               <input type="text" class="inp" x-model="form.ref_no" autocomplete="off">
             </div>
           </div>
-          <div class="lg:col-span-2">
+          <div>
+            <label class="lbl">HSN (optional)</label>
+            <input type="text" class="inp" x-model="form.hsn" inputmode="numeric" autocomplete="off">
+          </div>
+          <div>
             <label class="lbl">Remarks (optional)</label>
             <input type="text" class="inp" x-model="form.remarks" autocomplete="off">
           </div>
@@ -398,15 +385,15 @@
     <!-- ============ STOCK ============ -->
     <template x-if="route === 'stock'">
       <div class="space-y-3">
-        <div class="grid grid-cols-4 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-lg">
-          <template x-for="t in [['RAW','Raw'],['FG','Finished'],['SCRAP','Scrap'],['VENDOR','Vendors']]" :key="t[0]">
+        <div class="grid grid-cols-3 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-md">
+          <template x-for="t in [['RAW','Metal'],['SCRAP','Scrap'],['VENDOR','With vendors']]" :key="t[0]">
             <button @click="stockTab = t[0]" class="h-11 lg:h-9 rounded-lg" :class="stockTab === t[0] ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900'" x-text="t[1]"></button>
           </template>
         </div>
 
         <div x-show="stockTab !== 'VENDOR'" class="space-y-3">
           <div class="flex gap-2 lg:max-w-xl">
-            <input type="search" class="inp h-12 text-base flex-1" placeholder="Search item or HSN" x-model="stockQ">
+            <input type="search" class="inp h-12 text-base flex-1" placeholder="Search: brass, rod, 63/37, 12 mm…" x-model="stockQ">
             <button @click="hideZero = !hideZero" class="h-12 px-3 rounded-xl border text-sm font-semibold whitespace-nowrap"
                     :class="hideZero ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300'"
                     x-text="hideZero ? 'In stock' : 'All items'"></button>
@@ -414,10 +401,7 @@
           <div class="card divide-y divide-slate-100 lg:hidden">
             <template x-for="i in stockRows" :key="i.id">
               <button class="w-full p-4 flex items-center justify-between gap-3 text-left active:bg-slate-50 hover:bg-slate-50" @click="openItemLedger(i)">
-                <span class="min-w-0">
-                  <span class="block font-semibold truncate" x-text="i.name"></span>
-                  <span class="block text-sm text-slate-500" x-text="'HSN ' + (i.hsn || '—')"></span>
-                </span>
+                <span class="min-w-0 font-semibold" x-text="i.name"></span>
                 <span class="text-right whitespace-nowrap">
                   <span class="text-xl font-bold tabular-nums" :class="i.stock < 0 ? 'text-red-700' : ''" x-text="num(i.stock)"></span>
                   <span class="text-sm text-slate-500" x-text="i.unit"></span>
@@ -428,12 +412,11 @@
           </div>
           <div class="hidden lg:block card overflow-hidden">
             <table class="tbl">
-              <thead><tr><th>Item</th><th class="w-40">HSN</th><th class="w-48 text-right">Stock</th></tr></thead>
+              <thead><tr><th>Material · grade · size</th><th class="w-48 text-right">Stock</th></tr></thead>
               <tbody>
                 <template x-for="i in stockRows" :key="i.id">
                   <tr tabindex="0" @click="openItemLedger(i)" @keydown.enter="openItemLedger(i)" title="Open item ledger">
                     <td class="font-semibold" x-text="i.name"></td>
-                    <td class="text-slate-500 tabular-nums" x-text="i.hsn || '—'"></td>
                     <td class="text-right whitespace-nowrap"><span class="text-base font-bold tabular-nums" :class="i.stock < 0 ? 'text-red-700' : ''" x-text="num(i.stock)"></span> <span class="text-slate-500" x-text="i.unit"></span></td>
                   </tr>
                 </template>
@@ -566,6 +549,8 @@
             <template x-if="entry.challan_no"><dd class="col-span-2 font-semibold" x-text="entry.challan_no + (entry.lot_status ? ' (' + entry.lot_status.toLowerCase() + ')' : '')"></dd></template>
             <template x-if="entry.ref_no && entry.entry_type !== 'LABOUR_OUT'"><dt class="text-slate-500" x-text="entry.entry_type === 'SALE' ? 'Invoice' : (entry.entry_type === 'LABOUR_IN' ? 'Vendor challan' : 'Bill no.')"></dt></template>
             <template x-if="entry.ref_no && entry.entry_type !== 'LABOUR_OUT'"><dd class="col-span-2 font-semibold" x-text="entry.ref_no"></dd></template>
+            <template x-if="entry.hsn"><dt class="text-slate-500">HSN</dt></template>
+            <template x-if="entry.hsn"><dd class="col-span-2 font-semibold" x-text="entry.hsn"></dd></template>
             <template x-if="entry.remarks"><dt class="text-slate-500">Remarks</dt></template>
             <template x-if="entry.remarks"><dd class="col-span-2" x-text="entry.remarks"></dd></template>
           </dl>
@@ -573,7 +558,7 @@
         <div class="card divide-y divide-slate-100">
           <template x-for="l in entry.lines">
             <div class="p-4 flex items-center justify-between gap-3">
-              <div class="min-w-0"><div class="font-semibold" x-text="l.item_name"></div><div class="text-sm text-slate-500" x-text="'HSN ' + (l.hsn || '—')"></div></div>
+              <div class="min-w-0 font-semibold" x-text="l.item_name"></div>
               <div class="text-lg font-bold tabular-nums" :class="l.qty > 0 ? 'text-emerald-700' : 'text-rose-700'" x-text="lineText(l)"></div>
             </div>
           </template>
@@ -669,8 +654,8 @@
     <!-- ============ MASTERS ============ -->
     <template x-if="route === 'masters'">
       <div class="space-y-3">
-        <div class="grid gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-md" :class="canEdit ? 'grid-cols-4' : 'grid-cols-3'">
-          <template x-for="t in [['items','Items'],['parties','Parties'],['vendors','Vendors']].concat(canEdit ? [['users','Users']] : [])" :key="t[0]">
+        <div class="grid grid-cols-3 lg:grid-cols-6 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-3xl">
+          <template x-for="t in masterTabs" :key="t[0]">
             <button @click="mtab = t[0]; mq = ''" class="h-11 lg:h-9 rounded-lg" :class="mtab === t[0] ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900'" x-text="t[1]"></button>
           </template>
         </div>
@@ -685,14 +670,13 @@
             <button class="w-full p-3 flex items-center justify-between gap-3 text-left active:bg-slate-50 hover:bg-slate-50" @click="editMaster(mtab, r)">
               <span class="min-w-0">
                 <span class="block font-semibold truncate" :class="r.active ? '' : 'text-slate-400 line-through'" x-text="r.name"></span>
-                <span class="block text-sm text-slate-500" x-show="mtab === 'items'" x-text="'HSN ' + (r.hsn || '—') + ' · ' + r.unit"></span>
+                <span class="block text-sm text-slate-500" x-show="mtab === 'grades'" x-text="mat(r.material_id) && mat(r.material_id).name"></span>
                 <span class="block text-sm text-slate-500" x-show="mtab === 'parties' && (r.gstin || r.phone)" x-text="[r.gstin, r.phone].filter(Boolean).join(' · ')"></span>
                 <span class="block text-sm text-slate-500" x-show="mtab === 'vendors' && r.gstin" x-text="'GSTIN ' + r.gstin"></span>
                 <span class="block text-sm text-slate-500" x-show="mtab === 'users'" x-text="r.role === 'EDITOR' ? 'Editor · can add and change entries' : 'Viewer · can only look'"></span>
               </span>
-              <span x-show="mtab === 'items'" class="chip shrink-0"
-                    :class="{RAW:'bg-slate-100 text-slate-700', FG:'bg-emerald-100 text-emerald-800', SCRAP:'bg-orange-100 text-orange-800'}[r.type]"
-                    x-text="ITEM_TYPES[r.type]"></span>
+              <span x-show="mtab === 'materials'" class="chip shrink-0" :class="r.is_scrap ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-700'"
+                    x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span>
             </button>
           </template>
           <div x-show="!masterRows.length" class="p-6 text-center text-slate-500">Nothing here yet.</div>
@@ -701,18 +685,17 @@
           <table class="tbl">
             <thead><tr>
               <th>Name</th>
-              <th x-show="mtab === 'items'">HSN</th><th x-show="mtab === 'items'">Unit</th><th x-show="mtab === 'items'">Type</th>
+              <th x-show="mtab === 'materials'">Kind</th><th x-show="mtab === 'grades'">Material</th>
               <th x-show="mtab === 'parties' || mtab === 'vendors'">GSTIN</th><th x-show="mtab === 'parties'">Phone</th>
               <th x-show="mtab === 'users'">Role</th>
               <th class="text-right">Status</th>
             </tr></thead>
             <tbody>
               <template x-for="r in masterRows" :key="r.id">
-                <tr tabindex="0" @click="editMaster(mtab, r)" @keydown.enter="editMaster(mtab, r)" title="Edit">
+                <tr tabindex="0" @click="editMaster(mtab, r)" @keydown.enter="editMaster(mtab, r)" :title="canEdit ? 'Edit' : ''">
                   <td class="font-semibold" :class="r.active ? '' : 'text-slate-400'" x-text="r.name"></td>
-                  <td x-show="mtab === 'items'" class="tabular-nums text-slate-600" x-text="r.hsn || '—'"></td>
-                  <td x-show="mtab === 'items'" class="text-slate-600" x-text="r.unit"></td>
-                  <td x-show="mtab === 'items'"><span class="chip" :class="{RAW:'bg-slate-100 text-slate-700', FG:'bg-emerald-100 text-emerald-800', SCRAP:'bg-orange-100 text-orange-800'}[r.type]" x-text="ITEM_TYPES[r.type]"></span></td>
+                  <td x-show="mtab === 'materials'"><span class="chip" :class="r.is_scrap ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-700'" x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span></td>
+                  <td x-show="mtab === 'grades'" class="text-slate-600" x-text="mat(r.material_id) && mat(r.material_id).name"></td>
                   <td x-show="mtab === 'parties' || mtab === 'vendors'" class="text-slate-600" x-text="r.gstin || '—'"></td>
                   <td x-show="mtab === 'parties'" class="text-slate-600" x-text="r.phone || '—'"></td>
                   <td x-show="mtab === 'users'"><span class="chip" :class="r.role === 'EDITOR' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'" x-text="r.role === 'EDITOR' ? 'Editor' : 'Viewer'"></span></td>
@@ -739,25 +722,24 @@
     <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" @click.self="medit = null" @keydown.escape.window="medit = null">
       <form class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" @submit.prevent="saveMaster()">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold" x-text="(medit.id ? 'Edit ' : 'Add ') + {items:'item', parties:'party', vendors:'vendor', users:'user'}[medit.kind]"></h3>
+          <h3 class="text-lg font-bold" x-text="(medit.id ? 'Edit ' : 'Add ') + masterNoun(medit.kind)"></h3>
           <button type="button" class="h-10 w-10 grid place-items-center text-2xl text-slate-500 rounded-lg hover:bg-slate-100" @click="medit = null" aria-label="Close">×</button>
         </div>
         <div><label class="lbl">Name</label><input class="inp" x-model="medit.data.name" autocomplete="off"></div>
-        <template x-if="medit.kind === 'items'">
-          <div class="space-y-4">
-            <div class="grid grid-cols-2 gap-3">
-              <div><label class="lbl">HSN code</label><input class="inp" x-model="medit.data.hsn" inputmode="numeric" autocomplete="off"></div>
-              <div><label class="lbl">Unit</label>
-                <select class="inp" x-model="medit.data.unit"><option>kg</option><option>pcs</option><option>m</option></select></div>
-            </div>
-            <div>
-              <label class="lbl">Type</label>
-              <div class="grid grid-cols-3 gap-2">
-                <template x-for="t in ['RAW','FG','SCRAP']" :key="t">
-                  <button type="button" @click="medit.data.type = t" class="h-12 rounded-xl border-2 font-semibold"
-                          :class="medit.data.type === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300'" x-text="ITEM_TYPES[t]"></button>
-                </template>
-              </div>
+        <template x-if="medit.kind === 'materials'">
+          <label class="card p-4 flex items-start gap-3">
+            <input type="checkbox" class="mt-1 w-6 h-6 accent-orange-600" x-model="medit.data.is_scrap">
+            <span><b>This is scrap</b><br>
+              <span class="text-sm text-slate-600">Scrap is picked by material only: no type, grade or size.</span></span>
+          </label>
+        </template>
+        <template x-if="medit.kind === 'grades'">
+          <div>
+            <label class="lbl">Grade of</label>
+            <div class="grid grid-cols-3 gap-2">
+              <template x-for="m in metalMaterials" :key="m.id">
+                <button type="button" class="opt" :class="medit.data.material_id === m.id ? 'opt-on' : ''" @click="medit.data.material_id = m.id" x-text="m.name"></button>
+              </template>
             </div>
           </div>
         </template>
@@ -805,7 +787,7 @@
     <div class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl h-[85vh] sm:h-[75vh] flex flex-col">
       <div class="p-4 pb-2 space-y-3 border-b border-slate-100">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold" x-text="sheet.adding ? (sheet.addParty ? 'Add new party' : 'Add new item') : sheet.title"></h3>
+          <h3 class="text-lg font-bold" x-text="sheet.adding ? 'Add new party' : sheet.title"></h3>
           <button class="h-10 w-10 grid place-items-center text-2xl text-slate-500 rounded-lg hover:bg-slate-100" @click="closeSheet()" aria-label="Close">×</button>
         </div>
         <input x-show="!sheet.adding" id="sheet-q" type="search" class="inp h-12 text-base" placeholder="Type to search" x-model="sheet.q" autocomplete="off" @keydown.enter.prevent="pickFirst()">
@@ -819,28 +801,6 @@
         <div class="grid grid-cols-2 gap-3">
           <button type="button" class="btn-ghost" @click="sheet.adding = false">Back</button>
           <button type="submit" class="btn-primary" :disabled="busy">Add party</button>
-        </div>
-      </form>
-
-      <!-- add item form -->
-      <form x-show="sheet.adding && !sheet.addParty" class="p-4 space-y-4 overflow-y-auto" @submit.prevent="saveNewItem()">
-        <div><label class="lbl">Item name</label><input class="inp" x-model="sheet.newItem.name" autocomplete="off"></div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="lbl">HSN code</label><input class="inp" x-model="sheet.newItem.hsn" inputmode="numeric" autocomplete="off"></div>
-          <div><label class="lbl">Unit</label><select class="inp" x-model="sheet.newItem.unit"><option>kg</option><option>pcs</option><option>m</option></select></div>
-        </div>
-        <div>
-          <label class="lbl">Type</label>
-          <div class="grid grid-cols-3 gap-2">
-            <template x-for="t in ['RAW','FG','SCRAP']" :key="t">
-              <button type="button" @click="sheet.newItem.type = t" class="h-12 rounded-xl border-2 font-semibold"
-                      :class="sheet.newItem.type === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300'" x-text="ITEM_TYPES[t]"></button>
-            </template>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <button type="button" class="btn-ghost" @click="sheet.adding = false">Back</button>
-          <button type="submit" class="btn-primary" :disabled="busy">Add item</button>
         </div>
       </form>
 
@@ -862,8 +822,6 @@
           </div>
         </template>
         <div x-show="!sheetOptions.length" class="p-6 text-center text-slate-500" x-text="sheet.empty"></div>
-        <button x-show="sheet.addItemType" @click="startAddItem()" class="w-full p-4 mb-4 text-left font-bold text-emerald-700 border-t border-slate-100 active:bg-emerald-50 hover:bg-emerald-50"
-                x-text="sheet.q.trim() ? '+ Add “' + sheet.q.trim() + '” as new item' : '+ Add new item'"></button>
       </div>
     </div>
   </div>
@@ -908,6 +866,60 @@
       </form>
     </div>
   </div>
+
+  <!-- ============ Material / Type / Grade / Size ============ -->
+  <!-- One copy, stamped into each <div data-spec="…"> by stampSpecBlocks() in app.js. $K = the form field. -->
+  <template id="spec-tpl">
+    <div>
+      <div class="flex items-end justify-between">
+        <label class="lbl">Material</label>
+        <button type="button" x-show="specOut('$K')" class="text-sm font-semibold text-slate-700 mb-1.5 px-2" @click="pickFromStock('$K')">Pick from stock list</button>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <template x-for="m in specMaterials('$K')" :key="m.id">
+          <button type="button" class="opt" :class="form.$K.material_id === m.id ? 'opt-on' : ''" @click="setMaterial('$K', m.id)" x-text="m.name"></button>
+        </template>
+      </div>
+    </div>
+    <template x-if="specMat('$K') && !specMat('$K').is_scrap">
+      <div class="space-y-4">
+        <div>
+          <label class="lbl">Type</label>
+          <div class="grid grid-cols-4 gap-2">
+            <template x-for="t in specShapes('$K')" :key="t.id">
+              <button type="button" class="opt" :class="form.$K.shape_id === t.id ? 'opt-on' : ''" @click="form.$K.shape_id = t.id" x-text="t.name"></button>
+            </template>
+          </div>
+        </div>
+        <div x-show="specGrades('$K').length">
+          <label class="lbl" x-text="specMat('$K').name + ' grade'"></label>
+          <div class="grid grid-cols-3 lg:grid-cols-5 gap-2">
+            <template x-for="g in specGrades('$K')" :key="g.id">
+              <button type="button" class="opt" :class="form.$K.grade_id === g.id ? 'opt-on' : ''" @click="form.$K.grade_id = g.id" x-text="g.name"></button>
+            </template>
+          </div>
+        </div>
+        <div>
+          <label class="lbl">Size</label>
+          <input type="text" class="inp lg:max-w-sm" x-model="form.$K.size" placeholder="e.g. 12 mm or 25 x 3" autocomplete="off" maxlength="40">
+          <div x-show="sizeChips('$K').length" class="mt-2">
+            <div class="text-xs text-slate-500 mb-1" x-text="specOut('$K') ? 'In stock, tap one:' : 'Used before, tap to reuse:'"></div>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="i in sizeChips('$K')" :key="i.id">
+                <button type="button" class="h-10 px-3 rounded-full border text-sm font-semibold"
+                        :class="sizeKey(form.$K.size) === i.size_key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:border-slate-500'"
+                        @click="form.$K.size = i.size">
+                  <span x-text="i.size || 'No size'"></span><span x-show="specOut('$K')" class="font-normal" x-text="' · ' + num(available(i.id)) + ' ' + i.unit"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    <div x-show="specOut('$K') && !specMissing('$K')" class="text-sm font-semibold" :class="specStock('$K') > 0 ? 'text-slate-600' : 'text-red-700'"
+         x-text="'In stock: ' + num(specStock('$K')) + ' ' + specUnit('$K')"></div>
+  </template>
 
   <!-- ============ toast ============ -->
   <div x-show="toast" x-cloak x-transition.opacity class="print:hidden fixed inset-x-0 bottom-24 lg:bottom-8 lg:left-60 z-50 flex justify-center px-4 pointer-events-none">

@@ -20,23 +20,35 @@ Give the PC a fixed IP in the router so the phone link never changes.
 
 ## How it works
 
+Every entry picks its material the same way, with big buttons:
+
+1. **Material**: Brass, Copper, Cu/Ni, Brass Scrap, Copper Scrap, Cu/Ni Scrap
+2. **Type**: Tube, Rod, Sheet, Strip
+3. **Grade**: only the grades of the chosen material (Brass 63/37, 70/30…; Copper DHP, ETP…; Cu/Ni 90/10…)
+4. **Size**: typed (e.g. `12 mm`, `25 x 3`). Sizes used before show as tap-to-reuse chips.
+
+Scrap is material only: no type, grade or size. Each Material + Type + Grade + Size is its own stock line, made the
+first time an entry uses it. Size is matched loosely (`12 MM` = `12mm` = `12 mm`), so typing it a little differently
+doesn't split the stock. **HSN** is typed on each entry (optional).
+
 | Screen | What it does |
 |---|---|
-| Purchase In | Material + party (+ add new) + qty, bill no. Adds to stock. |
-| Labour Out | Vendor + material + qty. Auto challan no. (LO-0001…). Removes from stock, opens a challan. |
-| Labour In | Vendor → open challan → FG item/qty + scrap item/qty. Partial receipts allowed. Tick "complete" to close the challan; what's left is **burn** (auto-calculated, warns above 5%). |
-| Sale Out | Item + party + qty, invoice no. Can't sell more than stock. |
+| Purchase In | Party (+ add new) + material/type/grade/size + qty, bill no., HSN. Adds to stock. |
+| Labour Out | Vendor + material/type/grade/size + qty. Auto challan no. (LO-0001…). Removes from stock, opens a challan. |
+| Labour In | Vendor → open challan → material received (pre-filled with what was sent; change the size if it was drawn down) + qty, and scrap + qty. Partial receipts allowed. Tick "complete" to close the challan; what's left is **burning loss** (auto-calculated, warns above 5%). |
+| Sale Out | Party + material/type/grade/size + qty, invoice no., HSN. Shows only sizes in stock; "Pick from stock list" fills all four at once. Can't sell more than stock. |
 | Opening Stock | Go-live balances. For material already lying with a vendor, use Labour Out with "Already with vendor" ticked. |
-| Stock | Raw / Finished / Scrap / With Vendors (with days-out aging). Tap an item to see its ledger. |
+| Stock | Metal / Scrap / With vendors (with days-out aging). Tap a line to see its ledger. |
 | Ledger | Every entry with filters. Tap → detail → Edit / Delete. Every create/edit/delete is logged. |
-| Masters | Items (name, HSN, type, unit), parties, vendors. Deactivate instead of delete. Backup download. |
+| Masters | Materials (tick "scrap"), Types, Grades (each belongs to one material), parties, vendors. Renaming updates every stock line. Deactivate instead of delete. Backup download. |
 
 Rules enforced by the server:
 
 - Stock is never typed. It is always computed from entries, so it can't drift.
 - Nothing can make stock negative: sales, labour out, edits and deletes are all checked.
 - Labour In can't exceed what's pending on the challan.
-- A Labour Out with receipts against it can't be deleted, and its item/vendor can't change.
+- A Labour Out with receipts against it can't be deleted, and its material/vendor can't change.
+- A grade must belong to the material picked. A material or grade already used in entries can't switch to scrap or to another material.
 - On a closed challan, only the closing Labour In can be deleted, which reopens the challan.
 - Labour In is corrected by delete + re-enter, not edit.
 - Deletes are soft (`deleted_at`), and the full history is in the `auditlog` table.
@@ -51,8 +63,9 @@ Rules enforced by the server:
 
 ```
 main.py           FastAPI app: API, validations, backup, serves static/
-models.py         SQLModel tables (item, party, vendor, entry, movement, labourlot, auditlog, user, loginsession)
-seed.py           27 items + HSN from the client list, 4 vendors (runs on an empty DB only)
+models.py         SQLModel tables (material, shape = "Type", grade, item = stock line, party, vendor, entry,
+                  movement, labourlot, auditlog, user, loginsession)
+seed.py           6 materials, 4 types, the client's grades, 4 vendors (each only while its table is empty)
 static/           index.html + app.js (Alpine.js) + app.css (prebuilt Tailwind) — no build needed to run
 styles/input.css  Tailwind source. Rebuild after changing classes:
                   npx tailwindcss@3 -i styles/input.css -o static/app.css --minify
@@ -77,9 +90,9 @@ tests/            .venv/bin/pip install pytest httpx   then   .venv/bin/python -
 
 | Report | What it shows |
 |---|---|
-| Item reconciliation | For a period, per item: opening + purchased + opening entries + job work in − job work out − sold = closing. Closing for a period ending today matches the Stock screen. |
+| Stock reconciliation | For a period, per material/type/grade/size: opening + purchased + opening entries + job work in − job work out − sold = closing. Closing for a period ending today matches the Stock screen. |
 | Vendor pending & aging | Open challans right now, and pending kg per vendor in 0–90 / 91–180 / 181–365 / over-1-year buckets (GST treats job work goods not back within 1 year as supplied). |
-| Burn % | Challans closed in a period: sent, finished, scrap, burn and burn %, by vendor, by material and per challan. Above 5% is highlighted. |
+| Burn % | Challans closed in a period: sent, received, scrap, burn and burn %, by vendor, by material and per challan. Above 5% is highlighted. |
 
 - Pick a period with the chips (this month, last month, financial year, Apr–Sep, Oct–Mar) or the date boxes.
 - **Export CSV** on any table opens straight in Excel.
