@@ -24,7 +24,7 @@ const REPORTS = [
   { key: 'vendor-pending', title: 'Vendor pending & aging', period: false, desc: 'Material with each vendor right now, grouped by how long it has been out.' },
   { key: 'burn', title: 'Burn %', period: true, desc: 'Loss on challans closed in a period, by vendor and by material.' },
 ];
-const ITEM_TYPES = { RAW: 'Metal', SCRAP: 'Scrap' };
+const ITEM_TYPES = { RAW: 'Raw', FG: 'Finished', SCRAP: 'Scrap' };
 const MASTER_TABS = [['materials', 'Materials', 'material'], ['shapes', 'Types', 'type'], ['grades', 'Grades', 'grade'],
   ['parties', 'Parties', 'party'], ['vendors', 'Vendors', 'vendor'], ['users', 'Users', 'user']];
 const ENDPOINT = { purchase: 'purchase', sale: 'sale', opening: 'opening', 'labour-out': 'labour-out', 'labour-in': 'labour-in' };
@@ -38,7 +38,8 @@ const num = (x) => nf.format(r3(x));
 const dmy = (iso) => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}-${m}-${y}`; };
 // same matching as the server: "12 MM" and "12mm" are one stock line
 const sizeKey = (s) => (s || '').trim().replace(/\s+/g, '').toLowerCase().replace(/[×*]/g, 'x');
-const blankSpec = () => ({ material_id: null, shape_id: null, grade_id: null, size: '' });
+// stage: RAW / FG (Finished). Raw and Finished of the same material/type/grade/size are separate stock.
+const blankSpec = (stage = null) => ({ stage, material_id: null, shape_id: null, grade_id: null, size: '' });
 
 // index.html has one copy of the Material / Type / Grade / Size block (#spec-tpl). Before Alpine
 // starts, stamp it into every <div data-spec="spec|recv">, with $K naming the form field it fills.
@@ -205,14 +206,14 @@ document.addEventListener('alpine:init', () => {
     get activeVendors() { return this.meta.vendors.filter((v) => v.active); },
 
     blankForm(r) {
-      const date = this.meta.today, spec = blankSpec();
+      const date = this.meta.today, raw = blankSpec('RAW');
       // every form carries spec + recv, so a form template still on screen during a route change never reads undefined
       return { spec: blankSpec(), recv: blankSpec(), ...{
-        purchase: { date, spec, party_id: null, qty: '', ref_no: '', hsn: '', remarks: '' },
-        sale: { date, spec, party_id: null, qty: '', ref_no: '', hsn: '', remarks: '' },
-        opening: { date, spec, qty: '', hsn: '', remarks: '' },
-        'labour-out': { date, vendor_id: null, spec, qty: '', challan_no: '', hsn: '', remarks: '', is_opening: false },
-        'labour-in': { date, lot_id: null, recv: blankSpec(), recv_qty: '', scrap_material_id: null, scrap_qty: '', close: false, ref_no: '', hsn: '', remarks: '' },
+        purchase: { date, spec: raw, party_id: null, qty: '', ref_no: '', hsn: '', remarks: '' },
+        sale: { date, spec: blankSpec('FG'), party_id: null, qty: '', ref_no: '', hsn: '', remarks: '' },
+        opening: { date, spec: blankSpec(), qty: '', hsn: '', remarks: '' },  // no default: say which on purpose
+        'labour-out': { date, vendor_id: null, spec: raw, qty: '', challan_no: '', hsn: '', remarks: '', is_opening: false },
+        'labour-in': { date, lot_id: null, recv: blankSpec('FG'), recv_qty: '', scrap_material_id: null, scrap_qty: '', close: false, ref_no: '', hsn: '', remarks: '' },
       }[r] };
     },
 
@@ -241,6 +242,7 @@ document.addEventListener('alpine:init', () => {
       const f = this.form[k], m = this.specMat(k);
       if (!m) return `Select ${what}.`;
       if (m.is_scrap) return '';
+      if (!f.stage) return `Select Raw or Finished for ${m.name}.`;
       if (!f.shape_id) return `Select type (tube, rod, sheet or strip) for ${m.name}.`;
       if (!f.grade_id && this.specGrades(k).length) return `Select ${m.name} grade.`;
       return '';
@@ -249,9 +251,24 @@ document.addEventListener('alpine:init', () => {
     specItem(k) {
       const f = this.form[k], m = this.specMat(k);
       if (this.specMissing(k)) return null;
-      const want = m.is_scrap ? { shape_id: null, grade_id: null, key: '' } : { shape_id: f.shape_id, grade_id: f.grade_id || null, key: sizeKey(f.size) };
-      return this.meta.items.find((i) => i.material_id === m.id && i.shape_id === want.shape_id
-        && i.grade_id === want.grade_id && i.size_key === want.key) || null;
+      return this.findItem(m.is_scrap ? { material_id: m.id, type: 'SCRAP', shape_id: null, grade_id: null, key: '' }
+        : { material_id: m.id, type: f.stage, shape_id: f.shape_id, grade_id: f.grade_id || null, key: sizeKey(f.size) });
+    },
+    findItem(w) {
+      return this.meta.items.find((i) => i.material_id === w.material_id && i.type === w.type && i.shape_id === w.shape_id
+        && i.grade_id === w.grade_id && i.size_key === w.key) || null;
+    },
+    // the line under the picker when sending out: stock, or what to do next
+    specStatus(k) {
+      const f = this.form[k], m = this.specMat(k), it = this.specItem(k);
+      if (it && this.available(it.id) > 0.0005) return { text: `In stock: ${num(this.available(it.id))} ${it.unit}`, warn: false };
+      if (!m.is_scrap && !f.size.trim() && this.sizeChips(k).length) return { text: 'Tap a size above, or type one.', warn: false };
+      if (m.is_scrap) return { text: `No ${m.name} in stock.`, warn: true };
+      const other = f.stage === 'FG' ? 'RAW' : 'FG';
+      const o = this.findItem({ material_id: m.id, type: other, shape_id: f.shape_id, grade_id: f.grade_id || null, key: sizeKey(f.size) });
+      const oq = o ? this.available(o.id) : 0;
+      return { warn: true, text: `No ${ITEM_TYPES[f.stage]} stock of this size.`
+        + (oq > 0.0005 ? ` ${ITEM_TYPES[other]} has ${num(oq)} ${o.unit}; tap ${ITEM_TYPES[other]} above to use it.` : '') };
     },
     specStock(k) { const i = this.specItem(k); return i ? this.available(i.id) : 0; },
     specUnit(k) { const i = this.specItem(k); return i ? i.unit : 'kg'; },
@@ -259,14 +276,18 @@ document.addEventListener('alpine:init', () => {
     sizeChips(k) {
       const f = this.form[k];
       if (!f.shape_id) return [];
-      return this.meta.items.filter((i) => i.material_id === f.material_id && i.shape_id === f.shape_id
+      return this.meta.items.filter((i) => i.material_id === f.material_id && i.type === f.stage && i.shape_id === f.shape_id
         && i.grade_id === (f.grade_id || null) && (this.specOut(k) ? this.available(i.id) > 0.0005 : i.used));
     },
     pickFromStock(k) {
       const options = this.meta.items.filter((i) => this.available(i.id) > 0.0005)
         .map((i) => ({ id: i.id, label: i.name, right: `${num(this.available(i.id))} ${i.unit}`, group: i.type }));
-      this.openSheet({ title: 'Pick from stock', options, groups: ['RAW', 'SCRAP'], empty: 'Nothing in stock.',
-        onPick: (id) => { const i = this.item(id); this.form[k] = { material_id: i.material_id, shape_id: i.shape_id, grade_id: i.grade_id, size: i.size }; } });
+      const first = this.form[k].stage || 'RAW';  // Sale shows Finished first, Labour Out shows Raw first
+      this.openSheet({ title: 'Pick from stock', options, groups: [first, ...['RAW', 'FG', 'SCRAP'].filter((g) => g !== first)], empty: 'Nothing in stock.',
+        onPick: (id) => {
+          const i = this.item(id);
+          this.form[k] = { stage: i.type === 'SCRAP' ? this.form[k].stage : i.type, material_id: i.material_id, shape_id: i.shape_id, grade_id: i.grade_id, size: i.size };
+        } });
     },
 
     // available stock for the selected item; on edit, add back what this entry already took
@@ -322,7 +343,7 @@ document.addEventListener('alpine:init', () => {
       const named = this.meta.materials.find((m) => m.is_scrap && m.active && m.name.toLowerCase() === `${l.material_name} scrap`.toLowerCase());
       const sent = this.mat(l.spec.material_id);
       this.form = { ...this.blankForm('labour-in'), lot_id: l.id,
-        recv: sent && !sent.is_scrap ? { ...l.spec } : blankSpec(),
+        recv: sent && !sent.is_scrap ? { ...l.spec, stage: 'FG' } : blankSpec('FG'),
         scrap_material_id: pref.scrap || (named && named.id) || null };
       this.lotStep = 'form';
       window.scrollTo(0, 0);

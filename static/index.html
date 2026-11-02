@@ -311,7 +311,8 @@
           </template>
 
           <div class="card p-4 space-y-4 lg:col-span-2">
-            <div class="font-bold text-slate-700">Material received</div>
+            <div><div class="font-bold text-slate-700">Material received</div>
+              <div class="text-sm text-slate-500">Goes into Finished stock. Change the size if it came back different.</div></div>
             <div data-spec="recv" class="space-y-4"></div>
             <div>
               <label class="lbl">Quantity received (kg)</label>
@@ -385,8 +386,8 @@
     <!-- ============ STOCK ============ -->
     <template x-if="route === 'stock'">
       <div class="space-y-3">
-        <div class="grid grid-cols-3 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-md">
-          <template x-for="t in [['RAW','Metal'],['SCRAP','Scrap'],['VENDOR','With vendors']]" :key="t[0]">
+        <div class="grid grid-cols-4 gap-1 bg-slate-200 p-1 rounded-xl text-sm font-semibold lg:max-w-lg">
+          <template x-for="t in [['RAW','Raw'],['FG','Finished'],['SCRAP','Scrap'],['VENDOR','Vendors']]" :key="t[0]">
             <button @click="stockTab = t[0]" class="h-11 lg:h-9 rounded-lg" :class="stockTab === t[0] ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900'" x-text="t[1]"></button>
           </template>
         </div>
@@ -883,6 +884,14 @@
     </div>
     <template x-if="specMat('$K') && !specMat('$K').is_scrap">
       <div class="space-y-4">
+        <div x-show="'$K' !== 'recv'">
+          <label class="lbl">Stage</label>
+          <div class="grid grid-cols-2 gap-2 lg:max-w-md">
+            <template x-for="st in [['RAW','Raw'],['FG','Finished']]" :key="st[0]">
+              <button type="button" class="opt" :class="form.$K.stage === st[0] ? 'opt-on' : ''" @click="form.$K.stage = st[0]" x-text="st[1]"></button>
+            </template>
+          </div>
+        </div>
         <div>
           <label class="lbl">Type</label>
           <div class="grid grid-cols-4 gap-2">
@@ -917,8 +926,9 @@
         </div>
       </div>
     </template>
-    <div x-show="specOut('$K') && !specMissing('$K')" class="text-sm font-semibold" :class="specStock('$K') > 0 ? 'text-slate-600' : 'text-red-700'"
-         x-text="'In stock: ' + num(specStock('$K')) + ' ' + specUnit('$K')"></div>
+    <template x-if="specOut('$K') && !specMissing('$K')">
+      <div class="text-sm font-semibold" :class="specStatus('$K').warn ? 'text-red-700' : 'text-slate-600'" x-text="specStatus('$K').text"></div>
+    </template>
   </template>
 
   <!-- ============ toast ============ -->
