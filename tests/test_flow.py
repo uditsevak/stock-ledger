@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date, timedelta
 
 import main
-from conftest import OWNER, login
+from conftest import OWNER, login, rm
 
 c = login(*OWNER)
 TODAY = date.today().isoformat()
@@ -117,13 +117,13 @@ def test_full_flow():
     err(c.post("/api/entries/sale", json={**sell, "qty": 131}), "not enough stock")
 
     # Delete rules
-    err(c.delete(f"/api/entries/{li1['id']}"), "closing")
-    ok(c.delete(f"/api/entries/{li2['id']}"))  # reopens the lot
+    err(rm(c, li1['id']), "closing")
+    ok(rm(c, li2['id']))  # reopens the lot
     reopened = ok(c.get("/api/lots"))[0]
     assert reopened["pending"] == 95 and reopened["status"] == "OPEN"
     assert stock(rod10) == 50
-    err(c.delete(f"/api/entries/{pur['id']}"), "not enough stock")
-    err(c.delete(f"/api/entries/{lo['id']}"), "delete those first")
+    err(rm(c, pur['id']), "not enough stock")
+    err(rm(c, lo['id']), "delete those first")
 
     # Edit labour out: 150 ok (stock back +50), 100 fails (105 already received), other grade fails
     body = {"date": TODAY, "vendor_id": shreya, "spec": rod, "qty": 150, "challan_no": "LO-0001"}
