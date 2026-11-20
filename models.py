@@ -39,9 +39,18 @@ class LotStatus:
 
 
 class Role:
-    EDITOR = "EDITOR"  # can add/edit/delete everything, manage users
-    VIEWER = "VIEWER"  # read-only
-    ALL = (EDITOR, VIEWER)
+    """Old single role, kept only to upgrade old databases. Access is the Perm checkboxes on User."""
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class Perm:
+    """What a user may do, beyond looking. The owner ticks these per user in Masters → Users."""
+    WRITE = "can_write"      # add and edit entries (and add parties from the pickers)
+    DELETE = "can_delete"    # delete entries (with a reason)
+    MASTERS = "can_masters"  # materials, types, grades, vendors
+    OWNER = "is_owner"       # users and permissions, backup download
+    ALL = (WRITE, DELETE, MASTERS, OWNER)
 
 
 def now() -> datetime:
@@ -115,6 +124,8 @@ class Entry(SQLModel, table=True):
     created_at: NaiveDatetime = Field(default_factory=now)
     updated_at: Optional[NaiveDatetime] = None
     deleted_at: Optional[NaiveDatetime] = Field(default=None, index=True)
+    deleted_by: Optional[int] = None  # user id
+    delete_reason: str = ""
 
 
 class Movement(SQLModel, table=True):
@@ -154,9 +165,13 @@ class AuditLog(SQLModel, table=True):
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
-    role: str = Role.VIEWER
+    role: str = Role.VIEWER  # old; only read once to set the checkboxes below on upgrade
     pw_hash: str
     active: bool = True
+    can_write: bool = False
+    can_delete: bool = False
+    can_masters: bool = False
+    is_owner: bool = False
     created_at: NaiveDatetime = Field(default_factory=now)
 
 

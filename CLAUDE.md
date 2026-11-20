@@ -13,8 +13,9 @@ Local stock ledger for a copper/brass manufacturer. FastAPI + SQLite (SQLModel) 
 - After changing classes in static/*, rebuild CSS: `npx tailwindcss@3 -i styles/input.css -o static/app.css --minify`
 - Tests: `.venv/bin/python -m pytest -q tests` (needs pytest + httpx; uses a temp STOCK_DATA_DIR shared by all test files, so assert on your own rows, not global counts).
 - Single process only (WRITE_LOCK, login lockout and SETUP_CODE are in memory). Deps are pinned in requirements.txt.
+- Production (PRODUCTION.md): Windows PC, `windows/service.ps1` runs it as a scheduled task via `run-server.cmd` (restart loop), Tailscale (`tailscale serve`) for remote access. Optional `settings.ini` ([server] port, [backup] offsite_dir; env vars win). App events log to data/logs. These Windows scripts were written without a Windows machine to test on.
 
-- Auth: every /api route except /api/auth/* needs a login (global `require_login` dependency). Viewers get GET only; /api/backup and /api/users are editor-only. `audit()` records the user via the `CURRENT_USER` contextvar. Frontend hides editor controls with `canEdit`, but the server is the real check.
+- Auth: every /api route except /api/auth/* needs a login (global `require_login` dependency). Beyond GET, `needed_perms()` maps method + path to the user permission flags (`Perm`: can_write, can_delete, can_masters, is_owner), ticked per user by the owner; unknown write routes default to owner-only. /api/backup* and /api/users are owner-only. Deleting an entry needs `{reason}` in the DELETE body. The old `User.role` is only read once to upgrade old databases. Keep at least one active owner. `audit()` records the user via the `CURRENT_USER` contextvar. Frontend hides editor controls with `canEdit`, but the server is the real check.
 - Schema changes to existing tables need a manual `ALTER TABLE` in `init_db()` (create_all only makes new tables).
 
 - Reports: each `/api/reports/*` returns `{tables: [{key, title, cols: [[field, label, kind]], rows, total?}]}`. The frontend renders and CSV-exports any table generically, so a new report needs only a backend function plus an entry in `REPORTS` (app.js).

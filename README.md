@@ -50,7 +50,7 @@ doesn't split the stock. **HSN** is typed on each entry (optional).
 | Sale Out | Party + material/type/grade/size + qty, invoice no., HSN. Shows only sizes in stock; "Pick from stock list" fills all four at once. Can't sell more than stock. |
 | Opening Stock | Go-live balances. For material already lying with a vendor, use Labour Out with "Already with vendor" ticked. |
 | Stock | Raw / Finished / Scrap / Vendors (with days-out aging). Tap a line to see its ledger. |
-| Ledger | Every entry with filters. Tap → detail → Edit / Delete. Every create/edit/delete is logged. |
+| Ledger | Every entry with filters. Tap → detail → Edit / Delete (delete needs a reason). "Show deleted" lists deleted entries with who and why. Every create/edit/delete is logged. |
 | Masters | Materials (tick "scrap"), Types, Grades (each belongs to one material), parties, vendors. Renaming updates every stock line. Deactivate instead of delete. Backup download. |
 
 Rules enforced by the server:
@@ -62,7 +62,13 @@ Rules enforced by the server:
 - A grade must belong to the material picked. A material or grade already used in entries can't switch to scrap or to another material.
 - On a closed challan, only the closing Labour In can be deleted, which reopens the challan.
 - Labour In is corrected by delete + re-enter, not edit.
-- Deletes are soft (`deleted_at`), and the full history is in the `auditlog` table.
+- Deletes are soft (`deleted_at`, `deleted_by`, `delete_reason`), and the full history is in the `auditlog` table.
+
+## Running it for real
+
+See **[PRODUCTION.md](PRODUCTION.md)**: factory PC as a Windows background service, owner access from anywhere with
+Tailscale, daily off-site copy to Google Drive, restore drill, updates and a security checklist.
+Optional settings go in `settings.ini` (copy `settings.example.ini`).
 
 ## Backups
 
@@ -85,19 +91,19 @@ tests/            .venv/bin/pip install pytest httpx   then   .venv/bin/python -
 
 ## Logins
 
-- **First run:** the app asks for the first editor's name and password, plus a **setup code** that is printed in the window where the app was started. Only someone at the server can see it, so nobody else on the network can grab the first account.
-- **Masters → Users** (editors only): add people, set them as **Editor** (add/edit/delete, manage users) or **Viewer** (look only), reset passwords, or untick Active to stop someone logging in.
+- **First run:** the app asks for the owner's name and password, plus a **setup code** that is printed in the window where the app was started (and in `data/logs/app.log`). Only someone at the server can see it, so nobody else on the network can grab the first account.
+- **Masters → Users** (owner only): add people and tick what each may do: **Add & edit entries**, **Delete entries** (reason required), **Manage masters** (materials, types, grades, vendors), **Owner** (users, permissions, backups). Nothing ticked = view only. Also reset passwords, or untick Active to stop someone logging in. The server checks permissions on every request, so changes apply at once. There is always at least one active owner.
 - On a phone or PC: tap your name, type your password. You stay logged in for 30 days.
 - 5 wrong passwords lock that name for 5 minutes.
 - Entry history shows who created, edited or deleted each entry.
-- Locked out (no editor remembers their password)? On the PC, in the project folder, run
+- Locked out (the owner forgot their password)? On the PC, in the project folder, run
   `.venv\Scripts\python main.py reset-password "Name" newpassword` (Windows) or
   `.venv/bin/python main.py reset-password "Name" newpassword` (Mac/Linux).
-  That person becomes an active editor with the new password.
+  That person becomes an active owner with every permission and the new password.
 
 ## Reports
 
-**Reports** in the menu. Everyone (editors and viewers) can open them.
+**Reports** in the menu. Everyone who can log in can open them.
 
 | Report | What it shows |
 |---|---|
@@ -111,7 +117,7 @@ tests/            .venv/bin/pip install pytest httpx   then   .venv/bin/python -
 
 ## Security notes
 
-- Every API call needs a login; viewers can only read. The server enforces this, not just the screens.
+- Every API call needs a login, and anything beyond looking needs the matching permission. The server enforces this, not just the screens.
 - Passwords are stored as salted scrypt hashes. Login cookies are HttpOnly, and only a hash of each cookie is stored.
 - 5 wrong passwords (or setup codes) lock that name for 5 minutes.
 - Pages send security headers (no framing by other sites, strict content policy) and API responses aren't cached by the browser.

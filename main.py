@@ -3,15 +3,19 @@
 Run:  python main.py      (or start.bat / start.sh)
 Open: http://localhost:8000 on this PC, http://<this-pc-ip>:8000 on phones.
 """
+import configparser
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import threading
 import time
+from logging.handlers import RotatingFileHandler
 from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 from datetime import date as Date
@@ -28,15 +32,44 @@ from sqlalchemy import delete, event, func
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from models import (AuditLog, Entry, EntryType, Grade, Item, ItemType, LabourLot, LoginSession,
-                    LotStatus, Material, Movement, Party, Role, Shape, User, Vendor, now)
+                    LotStatus, Material, Movement, Party, Perm, Role, Shape, User, Vendor, now)
 from seed import seed
 
 BASE = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("STOCK_DATA_DIR", BASE / "data"))
 BACKUP_DIR = DATA_DIR / "backups"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR = DATA_DIR / "logs"
+for _d in (DATA_DIR, BACKUP_DIR, LOG_DIR):
+    _d.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "stock.db"
+
+# Optional settings.ini next to this file (see settings.example.ini). Environment variables win.
+SETTINGS = configparser.ConfigParser(interpolation=None)  # Windows paths may contain %
+try:
+    SETTINGS.read(BASE / "settings.ini", encoding="utf-8-sig")  # Notepad may save a BOM
+except configparser.Error as _err:
+    SETTINGS = configparser.ConfigParser(interpolation=None)
+    _SETTINGS_ERROR = f"settings.ini could not be read, using defaults: {_err}"
+else:
+    _SETTINGS_ERROR = ""
+
+
+def setting(section: str, key: str, env: str, default: str = "") -> str:
+    return (os.environ.get(env) or SETTINGS.get(section, key, fallback=default)).strip()
+
+
+OFFSITE_DIR = setting("backup", "offsite_dir", "STOCK_OFFSITE_DIR")  # e.g. a Google Drive / OneDrive folder
+
+# The app often runs in the background with no window, so app events also go to data/logs/app.log.
+log = logging.getLogger("stockledger")
+if not log.handlers:
+    log.setLevel(logging.INFO)
+    _fh = RotatingFileHandler(LOG_DIR / "app.log", maxBytes=1_000_000, backupCount=5, encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(_fh)
+    log.addHandler(logging.StreamHandler())
+if _SETTINGS_ERROR:
+    log.error(_SETTINGS_ERROR)
 
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
 
@@ -62,7 +95,7 @@ MAX_FAILS, LOCK_SECONDS = 5, 300
 # ponytail: in-memory lockout, resets on restart; fine for a single server process
 FAILS: dict = {}  # user_id or "setup" -> (failed tries, locked until epoch secs)
 SETUP_CODE: Optional[str] = None  # one-time code for first-run setup, printed in the server window
-EDITOR_ONLY_READS = ("/api/backup", "/api/users")  # backup holds password hashes
+OWNER_ONLY_READS = ("/api/backup", "/api/users")  # backup holds password hashes
 CURRENT_USER: ContextVar[Optional[int]] = ContextVar("current_user", default=None)
 
 
@@ -100,7 +133,7 @@ def ensure_setup_code():
             return
     if not SETUP_CODE:
         SETUP_CODE = secrets.token_hex(3).upper()
-        print(f"\n  First-time setup code: {SETUP_CODE}\n  Type it on the setup screen to create the first editor.\n", flush=True)
+        log.warning(f"First-time setup code: {SETUP_CODE}  (type it on the setup screen to create the owner)")
 
 
 def token_hash(token: str) -> str:
@@ -115,9 +148,31 @@ def user_for_token(s: Session, token: Optional[str]) -> Optional[User]:
     return u if u and u.active else None
 
 
+NO_PERM = {
+    Perm.WRITE: "You can't add or change entries. Ask the owner to give you that permission.",
+    Perm.DELETE: "You can't delete entries. Ask someone who is allowed to delete.",
+    Perm.MASTERS: "You can't change materials, types, grades or vendors. Ask the owner.",
+    Perm.OWNER: "Only the owner can do this.",
+}
+
+
+def needed_perms(method: str, path: str) -> tuple:
+    """Permissions that allow this request (any one is enough). () = any logged-in user."""
+    if method in ("GET", "HEAD"):
+        return (Perm.OWNER,) if path.startswith(OWNER_ONLY_READS) else ()
+    if path.startswith("/api/entries"):
+        return (Perm.DELETE,) if method == "DELETE" else (Perm.WRITE,)
+    if path.startswith("/api/parties"):  # added from the entry screens
+        return (Perm.WRITE, Perm.MASTERS)
+    if path.startswith(("/api/materials", "/api/shapes", "/api/grades", "/api/vendors")):
+        return (Perm.MASTERS,)
+    return (Perm.OWNER,)  # users, and anything added later until someone decides otherwise
+
+
 async def require_login(request: Request):
-    """Runs before every route. /api/auth/* is open; the rest needs a login,
-    and anything that changes data (or reads users/backup) needs an editor."""
+    """Runs before every route. /api/auth/* is open; the rest needs a login, and anything beyond
+    looking needs the matching permission (see needed_perms). Permissions are read fresh on every
+    request, so a change by the owner applies at once."""
     path = request.url.path
     if not path.startswith("/api/") or path.startswith("/api/auth/"):
         return
@@ -125,8 +180,9 @@ async def require_login(request: Request):
         u = user_for_token(s, request.cookies.get(COOKIE))
     if not u:
         bad("Please log in.", 401)
-    if u.role != Role.EDITOR and (request.method != "GET" or path.startswith(EDITOR_ONLY_READS)):
-        bad("You have view-only access. Ask an editor to make changes.", 403)
+    need = needed_perms(request.method, path)
+    if need and not any(getattr(u, p) for p in need):
+        bad(NO_PERM[need[0]], 403)
     CURRENT_USER.set(u.id)  # audit() reads this
 
 
@@ -374,6 +430,8 @@ def entry_view(s: Session, e: Entry) -> dict:
         "created_at": e.created_at.isoformat(timespec="seconds"),
         "updated_at": e.updated_at.isoformat(timespec="seconds") if e.updated_at else None,
         "deleted_at": e.deleted_at.isoformat(timespec="seconds") if e.deleted_at else None,
+        "delete_reason": e.delete_reason,
+        "deleted_by": (s.get(User, e.deleted_by).name if e.deleted_by and s.get(User, e.deleted_by) else None),
         "is_opening": False, "closes_lot": False, "burn": 0.0,
     }
     if e.entry_type == EntryType.LABOUR_OUT and lot:
@@ -719,8 +777,15 @@ def update_entry(entry_id: int, body: dict = Body(...), s: Session = Depends(get
         return after
 
 
+class DeleteBody(BaseModel):
+    reason: str = PField(max_length=200)
+
+
 @app.delete("/api/entries/{entry_id}")
-def delete_entry(entry_id: int, s: Session = Depends(get_session)):
+def delete_entry(entry_id: int, b: DeleteBody, s: Session = Depends(get_session)):
+    reason = " ".join(b.reason.split())
+    if len(reason) < 3:
+        bad("Write why you are deleting this entry.")
     with WRITE_LOCK:
         e = _live_entry(s, entry_id)
         snap = entry_view(s, e)
@@ -740,10 +805,10 @@ def delete_entry(entry_id: int, s: Session = Depends(get_session)):
                 lot.closed_date, lot.closed_by_entry_id = None, None
                 s.add(lot)
 
-        e.deleted_at = now()
+        e.deleted_at, e.deleted_by, e.delete_reason = now(), CURRENT_USER.get(), reason
         s.add(e)
         ensure_stock(s, item_ids)
-        audit(s, "DELETE", e.id, snap)
+        audit(s, "DELETE", e.id, {**snap, "reason": reason})
         s.commit()
         return {"ok": True}
 
@@ -1009,18 +1074,31 @@ class LoginBody(BaseModel):
 
 class UserBody(BaseModel):
     name: str = NAME
-    role: str = Role.VIEWER
     active: bool = True
     password: str = PField("", max_length=128)  # blank on edit = keep current password
+    can_write: bool = False
+    can_delete: bool = False
+    can_masters: bool = False
+    is_owner: bool = False
 
 
 def user_view(u: User) -> dict:
-    return {"id": u.id, "name": u.name, "role": u.role, "active": u.active}
+    return {"id": u.id, "name": u.name, "active": u.active, **{p: getattr(u, p) for p in Perm.ALL}}
+
+
+def grant_all(u: User):
+    for p in Perm.ALL:
+        setattr(u, p, True)
 
 
 def check_password(pw: str):
     if len(pw) < MIN_PASSWORD:
         bad(f"Password must be at least {MIN_PASSWORD} characters.")
+
+
+def is_https(request: Request) -> bool:
+    """HTTPS directly, via a forwarding proxy, or a Tailscale https://<pc>.<tailnet>.ts.net address."""
+    return request.url.scheme == "https" or request.headers.get("host", "").split(":")[0].endswith(".ts.net")
 
 
 def start_session(s: Session, u: User, request: Request, response: Response) -> dict:
@@ -1030,7 +1108,7 @@ def start_session(s: Session, u: User, request: Request, response: Response) -> 
     s.add(LoginSession(token_hash=token_hash(token), user_id=u.id))
     s.commit()
     response.set_cookie(COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
-                        secure=request.url.scheme == "https")
+                        secure=is_https(request))
     return user_view(u)
 
 
@@ -1055,7 +1133,8 @@ def auth_setup(b: SetupBody, request: Request, response: Response, s: Session = 
             record_fail("setup")
             bad("Wrong setup code. It is shown in the window where the app was started.")
         check_password(b.password)
-        u = User(name=_clean(b.name, "Your"), role=Role.EDITOR, pw_hash=hash_pw(b.password))
+        u = User(name=_clean(b.name, "Your"), pw_hash=hash_pw(b.password))
+        grant_all(u)  # the first person is the owner, with every permission
         s.add(u)
         s.flush()
         out = start_session(s, u, request, response)
@@ -1109,18 +1188,18 @@ def update_user(user_id: int, b: UserBody, request: Request, s: Session = Depend
 def _save_user(s: Session, u: User, b: UserBody, request: Request):
     with WRITE_LOCK:
         name = _clean(b.name, "User")
-        if b.role not in Role.ALL:
-            bad("Role must be EDITOR or VIEWER.")
         dup = s.exec(select(User).where(func.lower(User.name) == name.lower())).first()
         if dup and dup.id != u.id:
             bad(f"User '{dup.name}' already exists.")
-        u.name, u.role, u.active = name, b.role, b.active
+        u.name, u.active = name, b.active
+        for p in Perm.ALL:
+            setattr(u, p, getattr(b, p))
         if b.password:
             u.pw_hash = hash_pw(b.password)
         s.add(u)
         s.flush()
-        if not s.exec(select(User).where(User.role == Role.EDITOR, User.active)).first():
-            bad("Keep at least one active editor, or nobody can make changes.")
+        if not s.exec(select(User).where(User.is_owner, User.active)).first():
+            bad("Keep at least one active owner, or nobody can manage users.")
         if u.id and (b.password or not u.active):  # log them out everywhere except this browser
             mine = token_hash(request.cookies.get(COOKIE) or "")
             s.execute(delete(LoginSession).where(
@@ -1280,6 +1359,32 @@ def make_backup(path: Path) -> Path:
     return path
 
 
+OFFSITE_ERROR = {"msg": ""}  # last off-site copy problem, shown to the owner in Masters → Backup
+
+
+def copy_offsite(src: Path, keep: int = 30):
+    """Copy a backup into OFFSITE_DIR, a folder that Google Drive / OneDrive uploads. The folder's
+    parent must already exist, so a missing Drive install shows as an error instead of a
+    local folder that never uploads."""
+    if not OFFSITE_DIR:
+        OFFSITE_ERROR["msg"] = ""
+        return
+    try:
+        d = Path(OFFSITE_DIR)
+        d.mkdir(exist_ok=True)
+        dst = d / src.name
+        if not dst.exists():
+            tmp = dst.with_name(dst.name + ".part")  # sync apps never see a half-written file
+            shutil.copyfile(src, tmp)
+            tmp.replace(dst)
+        for old in sorted(d.glob("auto-*.db"))[:-keep]:
+            old.unlink(missing_ok=True)
+        OFFSITE_ERROR["msg"] = ""
+    except OSError as err:
+        OFFSITE_ERROR["msg"] = str(err)
+        log.error(f"Off-site backup to {OFFSITE_DIR} failed: {err}")
+
+
 def daily_auto_backup(keep: int = 30):
     if not DB_PATH.exists():
         return
@@ -1289,6 +1394,7 @@ def daily_auto_backup(keep: int = 30):
     autos = sorted(BACKUP_DIR.glob("auto-*.db"))
     for old in autos[:-keep]:
         old.unlink(missing_ok=True)
+    copy_offsite(target, keep)  # every hour, so it catches up after Drive was unavailable
 
 
 def _backup_loop():
@@ -1298,7 +1404,18 @@ def _backup_loop():
         try:
             daily_auto_backup()
         except Exception as err:  # keep the loop alive; the next hour tries again
-            print(f"Automatic backup failed: {err}", flush=True)
+            log.error(f"Automatic backup failed: {err}")
+
+
+@app.get("/api/backup/status")
+def backup_status():
+    """For the owner: are the daily copies happening, here and off-site?"""
+    day = lambda paths: paths[-1].stem.removeprefix("auto-") if paths else None  # noqa: E731
+    off = Path(OFFSITE_DIR) if OFFSITE_DIR else None
+    return {"last_local": day(sorted(BACKUP_DIR.glob("auto-*.db"))),
+            "offsite_dir": OFFSITE_DIR,
+            "last_offsite": day(sorted(off.glob("auto-*.db"))) if off and off.is_dir() else None,
+            "offsite_error": OFFSITE_ERROR["msg"]}
 
 
 @app.get("/api/backup")
@@ -1328,18 +1445,31 @@ def reset_flat_item_tables():
         for t in ("movement", "labourlot", "entry", "item", "auditlog"):
             con.execute(f"DROP TABLE IF EXISTS {t}")
     con.close()
-    print(f"\n  Stock entries were reset for the new Material / Type / Grade / Size fields."
-          f"\n  The old data is saved in {copy}\n", flush=True)
+    log.warning(f"Stock entries were reset for the new Material / Type / Grade / Size fields. "
+                f"The old data is saved in {copy}")
+
+
+def add_missing_columns(conn):
+    """create_all doesn't add columns to existing tables, so new columns are added here."""
+    added = set()
+    for table, col, ddl in (("auditlog", "user_id", "INTEGER"),
+                            ("vendor", "gstin", "VARCHAR NOT NULL DEFAULT ''"),
+                            ("entry", "deleted_by", "INTEGER"),
+                            ("entry", "delete_reason", "VARCHAR NOT NULL DEFAULT ''"),
+                            *(("user", p, "BOOLEAN NOT NULL DEFAULT 0") for p in Perm.ALL)):
+        if col not in {r[1] for r in conn.exec_driver_sql(f"PRAGMA table_info({table})")}:
+            conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            added.add(col)
+    if Perm.OWNER in added:  # upgrading from Editor/Viewer: editors keep doing everything
+        conn.exec_driver_sql(f"UPDATE user SET {', '.join(f'{p} = 1' for p in Perm.ALL)} "
+                             f"WHERE role = '{Role.EDITOR}'")
 
 
 def init_db():
     reset_flat_item_tables()
     SQLModel.metadata.create_all(engine)
-    with engine.begin() as conn:  # create_all doesn't add columns to existing tables
-        for table, col, ddl in (("auditlog", "user_id", "INTEGER"),
-                                ("vendor", "gstin", "VARCHAR NOT NULL DEFAULT ''")):
-            if col not in {r[1] for r in conn.exec_driver_sql(f"PRAGMA table_info({table})")}:
-                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    with engine.begin() as conn:
+        add_missing_columns(conn)
     with Session(engine) as s:
         seed(s)
         move_received_to_finished(s)
@@ -1353,18 +1483,19 @@ app.mount("/", StaticFiles(directory=BASE / "static", html=True), name="static")
 
 
 def reset_password(name: str, password: str) -> str:
-    """Locked-out recovery, run on the PC itself: makes `name` an active editor with a new password."""
+    """Locked-out recovery, run on the PC itself: makes `name` an active owner (all permissions) with a new password."""
     if len(password) < MIN_PASSWORD:
         return f"Password must be at least {MIN_PASSWORD} characters."
     with Session(engine) as s:
         u = s.exec(select(User).where(func.lower(User.name) == name.strip().lower())).first()
         if not u:
             return f"No user called '{name}'. Users: " + ", ".join(x.name for x in s.exec(select(User)).all())
-        u.pw_hash, u.role, u.active = hash_pw(password), Role.EDITOR, True
+        u.pw_hash, u.active = hash_pw(password), True
+        grant_all(u)
         s.add(u)
         s.execute(delete(LoginSession).where(LoginSession.user_id == u.id))
         s.commit()
-        return f"Done. {u.name} is an active editor with the new password."
+        return f"Done. {u.name} is an active owner with every permission and the new password."
 
 
 if __name__ == "__main__":
@@ -1373,4 +1504,17 @@ if __name__ == "__main__":
         sys.exit(print(reset_password(sys.argv[2], sys.argv[3])))
     import uvicorn
     # One process only: WRITE_LOCK and the login lockout live in this process's memory.
-    uvicorn.run(app, host=os.environ.get("HOST", "0.0.0.0"), port=int(os.environ.get("PORT", "8000")))
+    log_config = {  # server errors to data/logs/server.log as well as the window
+        "version": 1, "disable_existing_loggers": False,
+        "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(message)s"}},
+        "handlers": {
+            "console": {"class": "logging.StreamHandler", "formatter": "plain"},
+            "file": {"class": "logging.handlers.RotatingFileHandler", "filename": str(LOG_DIR / "server.log"),
+                     "maxBytes": 1_000_000, "backupCount": 5, "encoding": "utf-8", "formatter": "plain"}},
+        "loggers": {"uvicorn": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+                    "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False}},
+    }
+    # Tailscale (tailscale serve) and anything else on this PC that forwards requests talks to us
+    # from 127.0.0.1; uvicorn trusts its X-Forwarded-* headers by default, so cookies know about HTTPS.
+    uvicorn.run(app, host=setting("server", "host", "HOST", "0.0.0.0"),
+                port=int(setting("server", "port", "PORT", "8000")), log_config=log_config)

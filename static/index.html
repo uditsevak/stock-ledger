@@ -34,7 +34,7 @@
         </button>
       </template>
     </nav>
-    <div x-show="canEdit" class="px-3 pt-6 space-y-0.5">
+    <div x-show="canWrite" class="px-3 pt-6 space-y-0.5">
       <div class="eyebrow px-2.5 pb-1.5 text-xs">New entry</div>
       <template x-for="t in ['PURCHASE','LABOUR_OUT','LABOUR_IN','SALE','OPENING']" :key="t">
         <button @click="go('#/' + TYPES[t].route)" class="w-full h-9 px-2.5 rounded-lg flex items-center gap-3 text-sm font-medium transition"
@@ -47,7 +47,7 @@
       </template>
     </div>
     <div class="mt-auto p-3 space-y-1">
-      <a x-show="canEdit" href="/api/backup" class="h-9 px-2.5 rounded-lg flex items-center gap-3 text-sm font-medium text-zinc-600 hover:bg-zinc-950/[.04] hover:text-ink transition">
+      <a x-show="isOwner" href="/api/backup" class="h-9 px-2.5 rounded-lg flex items-center gap-3 text-sm font-medium text-zinc-600 hover:bg-zinc-950/[.04] hover:text-ink transition">
         <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
         Download backup
       </a>
@@ -55,7 +55,7 @@
         <span class="w-8 h-8 shrink-0 rounded-full bg-gradient-to-b from-zinc-600 to-zinc-900 text-white grid place-items-center text-[13px] font-semibold shadow-glow" x-text="auth.me && auth.me.name[0].toUpperCase()"></span>
         <span class="min-w-0 flex-1">
           <span class="block text-[13px] font-semibold truncate leading-4" x-text="auth.me && auth.me.name"></span>
-          <span class="block text-xs text-zinc-500" x-text="canEdit ? 'Editor' : 'View only'"></span>
+          <span class="block text-xs text-zinc-500 truncate" x-text="roleLabel(auth.me)"></span>
         </span>
         <button @click="logout()" class="h-8 w-8 grid place-items-center rounded-lg text-zinc-400 hover:text-ink hover:bg-zinc-950/5 transition" aria-label="Log out" title="Log out">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H3"/></svg>
@@ -78,7 +78,7 @@
       <button x-show="auth.me" @click="logout()" class="lg:hidden h-9 max-w-[8.5rem] pl-1 pr-3 mr-1 rounded-full bg-white shadow-hair ring-1 ring-zinc-950/10 active:bg-zinc-50 flex items-center gap-2 text-[13px] font-medium"
               :aria-label="'Logged in as ' + (auth.me && auth.me.name) + '. Tap to log out.'">
         <span class="w-7 h-7 shrink-0 rounded-full bg-gradient-to-b from-zinc-600 to-zinc-900 text-white grid place-items-center text-xs font-semibold" x-text="auth.me && auth.me.name[0].toUpperCase()"></span>
-        <span class="truncate" x-text="auth.me && (auth.me.name.split(' ')[0] + (canEdit ? '' : ' · view'))"></span>
+        <span class="truncate" x-text="auth.me && (auth.me.name.split(' ')[0] + (roleLabel(auth.me) === 'View only' ? ' · view' : ''))"></span>
       </button>
     </div>
   </header>
@@ -88,7 +88,7 @@
     <!-- ============ HOME ============ -->
     <template x-if="route === 'home'">
       <div class="space-y-7">
-        <div x-show="canEdit" class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <div x-show="canWrite" class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <template x-for="t in ['PURCHASE','LABOUR_OUT','LABOUR_IN','SALE']" :key="t">
             <button @click="go('#/' + TYPES[t].route)"
                     class="group card relative text-left p-4 h-[8.5rem] flex flex-col justify-between transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:scale-[.98] active:translate-y-0">
@@ -105,7 +105,7 @@
         </div>
 
         <div class="space-y-7 lg:space-y-0 lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:gap-x-6 lg:gap-y-4 lg:items-start">
-        <button @click="canEdit ? go('#/labour-in') : (stockTab = 'VENDOR', go('#/stock'))"
+        <button @click="canWrite ? go('#/labour-in') : (stockTab = 'VENDOR', go('#/stock'))"
                 class="relative overflow-hidden w-full p-5 text-left rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-950 text-white shadow-lift ring-1 ring-zinc-950 transition hover:-translate-y-0.5 active:scale-[.99] lg:col-start-3 lg:row-start-1 lg:mt-10">
           <span class="pointer-events-none absolute -top-16 -right-10 w-48 h-48 rounded-full bg-gradient-to-b from-blue-500/40 to-transparent blur-2xl"></span>
           <div class="relative flex items-center justify-between gap-2">
@@ -144,7 +144,7 @@
           </div>
         </div>
 
-        <button x-show="canEdit" @click="go('#/opening')" class="btn-ghost w-full lg:col-start-3">
+        <button x-show="canWrite" @click="go('#/opening')" class="btn-ghost w-full lg:col-start-3">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Opening Stock entry</button>
         </div>
       </div>
@@ -494,6 +494,7 @@
             <button @click="setLf('entry_type', t[0])" class="seg"
                     :class="lf.entry_type === t[0] ? 'seg-on' : ''" x-text="t[1]"></button>
           </template>
+          <button @click="setLf('include_deleted', !lf.include_deleted)" class="seg" :class="lf.include_deleted ? 'seg-on' : ''">Show deleted</button>
         </div>
         <div class="space-y-3 lg:space-y-0 lg:flex lg:gap-2">
         <div class="grid grid-cols-2 gap-2 lg:w-80 lg:shrink-0">
@@ -523,6 +524,7 @@
                     <span x-show="!e.lines.length" class="block text-[15px] font-medium text-zinc-500" x-text="'Challan closed, nothing received'"></span>
                     <span class="block mt-0.5 text-[13px] text-zinc-500 truncate" x-text="[TYPES[e.entry_type].label, who(e), e.challan_no || e.ref_no].filter(Boolean).join(' · ')"></span>
                     <span x-show="e.closes_lot" class="block mt-1 text-[13px] font-medium text-blue-700" x-text="'Closed · burn ' + num(e.burn) + ' kg'"></span>
+                    <span x-show="e.deleted_at" class="block mt-1 text-[13px] font-medium text-rose-700" x-text="'Deleted by ' + (e.deleted_by || '?') + ': ' + e.delete_reason"></span>
                   </span>
                   <span class="text-right text-[15px] font-semibold tabular-nums whitespace-nowrap">
                     <template x-for="l in e.lines"><span class="block" :class="l.qty > 0 ? 'text-emerald-600' : 'text-rose-600'" x-text="lineText(l)"></span></template>
@@ -546,6 +548,7 @@
                     <template x-for="l in e.lines"><div class="font-medium" x-text="l.item_name"></div></template>
                     <div x-show="!e.lines.length" class="font-semibold text-zinc-500">Challan closed, nothing received</div>
                     <div x-show="e.closes_lot" class="text-blue-700" x-text="'Closed · burn ' + num(e.burn) + ' kg'"></div>
+                    <div x-show="e.deleted_at" class="font-medium text-rose-700" x-text="'Deleted by ' + (e.deleted_by || '?') + ': ' + e.delete_reason"></div>
                   </td>
                   <td x-text="who(e)"></td>
                   <td class="text-zinc-600" x-text="e.challan_no || e.ref_no || ''"></td>
@@ -569,7 +572,10 @@
             <span class="chip" :class="TYPES[entry.entry_type].badge" x-text="TYPES[entry.entry_type].label"></span>
             <span class="text-sm text-zinc-500 tabular-nums" x-text="dmy(entry.date)"></span>
           </div>
-          <div x-show="entry.deleted_at" class="rounded-xl bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-200 px-3 py-2 text-sm font-medium">Deleted on <span x-text="entry.deleted_at && entry.deleted_at.replace('T', ' ')"></span></div>
+          <div x-show="entry.deleted_at" class="rounded-xl bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-200 px-3 py-2 text-sm">
+            <div class="font-medium" x-text="'Deleted ' + (entry.deleted_at || '').replace('T', ' ') + (entry.deleted_by ? ' by ' + entry.deleted_by : '')"></div>
+            <div x-show="entry.delete_reason" x-text="'Reason: ' + entry.delete_reason"></div>
+          </div>
           <dl class="grid grid-cols-3 gap-y-2.5 text-sm pt-3 border-t border-zinc-950/[.05]">
             <template x-if="entry.party_name"><dt class="text-zinc-500">Party</dt></template>
             <template x-if="entry.party_name"><dd class="col-span-2 font-medium" x-text="entry.party_name"></dd></template>
@@ -598,11 +604,11 @@
         <div class="text-xs text-zinc-400 px-1 space-y-0.5 tabular-nums">
           <template x-for="h in entry.history"><div x-text="h.action.toLowerCase() + 'd ' + h.at.replace('T', ' ') + (h.by ? ' by ' + h.by : '')"></div></template>
         </div>
-        <div class="grid grid-cols-2 gap-3" x-show="canEdit && !entry.deleted_at">
-          <button class="btn bg-white text-rose-600 shadow-hair ring-1 ring-inset ring-zinc-950/10 hover:bg-rose-50 hover:ring-rose-600/20" @click="deleteEntry(entry)">Delete</button>
-          <button class="btn-primary" x-show="entry.entry_type !== 'LABOUR_IN'" @click="editEntry(entry)">Edit</button>
+        <div class="grid grid-cols-2 gap-3" x-show="(canDelete || canWrite) && !entry.deleted_at">
+          <button x-show="canDelete" class="btn bg-white text-rose-600 shadow-hair ring-1 ring-inset ring-zinc-950/10 hover:bg-rose-50 hover:ring-rose-600/20" @click="deleteEntry(entry)">Delete</button>
+          <button class="btn-primary" x-show="canWrite && entry.entry_type !== 'LABOUR_IN'" @click="editEntry(entry)">Edit</button>
         </div>
-        <p x-show="canEdit && !entry.deleted_at && entry.entry_type === 'LABOUR_IN'" class="text-sm text-zinc-500 px-1">To correct a Labour In entry, delete it and enter it again.</p>
+        <p x-show="canWrite && !entry.deleted_at && entry.entry_type === 'LABOUR_IN'" class="text-sm text-zinc-500 px-1">To correct a Labour In entry, ask someone allowed to delete to remove it, then enter it again.</p>
       </div>
     </template>
 
@@ -693,7 +699,7 @@
         <div class="space-y-3 lg:col-span-2">
         <div class="flex gap-2">
           <input type="search" class="inp h-12 text-base flex-1" placeholder="Search" x-model="mq">
-          <button x-show="canEdit" class="btn-primary h-12 lg:h-11 text-base px-4" @click="editMaster(mtab)"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+          <button x-show="canEditMaster(mtab)" class="btn-primary h-12 lg:h-11 text-base px-4" @click="editMaster(mtab)"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button>
         </div>
         <div class="card divide-y divide-zinc-950/[.05] lg:hidden">
           <template x-for="r in masterRows" :key="r.id">
@@ -703,7 +709,7 @@
                 <span class="block text-sm text-zinc-500" x-show="mtab === 'grades'" x-text="mat(r.material_id) && mat(r.material_id).name"></span>
                 <span class="block text-sm text-zinc-500" x-show="mtab === 'parties' && (r.gstin || r.phone)" x-text="[r.gstin, r.phone].filter(Boolean).join(' · ')"></span>
                 <span class="block text-sm text-zinc-500" x-show="mtab === 'vendors' && r.gstin" x-text="'GSTIN ' + r.gstin"></span>
-                <span class="block text-sm text-zinc-500" x-show="mtab === 'users'" x-text="r.role === 'EDITOR' ? 'Editor · can add and change entries' : 'Viewer · can only look'"></span>
+                <span class="block text-sm text-zinc-500" x-show="mtab === 'users'" x-text="roleLabel(r)"></span>
               </span>
               <span x-show="mtab === 'materials'" class="chip shrink-0" :class="r.is_scrap ? 'bg-amber-50 text-amber-700 ring-amber-600/25' : 'bg-zinc-50 text-zinc-600 ring-zinc-500/20'"
                     x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span>
@@ -717,18 +723,18 @@
               <th>Name</th>
               <th x-show="mtab === 'materials'">Kind</th><th x-show="mtab === 'grades'">Material</th>
               <th x-show="mtab === 'parties' || mtab === 'vendors'">GSTIN</th><th x-show="mtab === 'parties'">Phone</th>
-              <th x-show="mtab === 'users'">Role</th>
+              <th x-show="mtab === 'users'">Can</th>
               <th class="text-right">Status</th>
             </tr></thead>
             <tbody>
               <template x-for="r in masterRows" :key="r.id">
-                <tr tabindex="0" @click="editMaster(mtab, r)" @keydown.enter="editMaster(mtab, r)" :title="canEdit ? 'Edit' : ''">
+                <tr tabindex="0" @click="editMaster(mtab, r)" @keydown.enter="editMaster(mtab, r)" :title="canEditMaster(mtab) ? 'Edit' : ''">
                   <td class="font-medium" :class="r.active ? '' : 'text-zinc-400'" x-text="r.name"></td>
                   <td x-show="mtab === 'materials'"><span class="chip" :class="r.is_scrap ? 'bg-amber-50 text-amber-700 ring-amber-600/25' : 'bg-zinc-50 text-zinc-600 ring-zinc-500/20'" x-text="r.is_scrap ? 'Scrap' : 'Metal'"></span></td>
                   <td x-show="mtab === 'grades'" class="text-zinc-600" x-text="mat(r.material_id) && mat(r.material_id).name"></td>
                   <td x-show="mtab === 'parties' || mtab === 'vendors'" class="text-zinc-600" x-text="r.gstin || '—'"></td>
                   <td x-show="mtab === 'parties'" class="text-zinc-600" x-text="r.phone || '—'"></td>
-                  <td x-show="mtab === 'users'"><span class="chip" :class="r.role === 'EDITOR' ? 'bg-ink text-white ring-ink' : 'bg-zinc-50 text-zinc-600 ring-zinc-500/20'" x-text="r.role === 'EDITOR' ? 'Editor' : 'Viewer'"></span></td>
+                  <td x-show="mtab === 'users'"><span class="chip" :class="r.is_owner ? 'bg-ink text-white ring-ink' : 'bg-zinc-50 text-zinc-600 ring-zinc-500/20'" x-text="roleLabel(r)"></span></td>
                   <td class="text-right"><span class="chip" :class="r.active ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 'bg-zinc-50 text-zinc-500 ring-zinc-500/20'" x-text="r.active ? 'Active' : 'Hidden'"></span></td>
                 </tr>
               </template>
@@ -737,9 +743,21 @@
           <div x-show="!masterRows.length" class="p-6 text-center text-zinc-500">Nothing here yet.</div>
         </div>
         </div>
-        <div x-show="canEdit" class="card p-4 lg:p-5 space-y-3">
+        <div x-show="isOwner" class="card p-4 lg:p-5 space-y-3">
           <div class="section">Backup</div>
-          <p class="text-sm text-zinc-600 leading-relaxed">The app saves an automatic copy every day in the <code class="font-mono text-[12px] bg-zinc-950/5 rounded-md px-1.5 py-0.5">data/backups</code> folder. Download one now to keep on a pen drive or Google Drive.</p>
+          <p class="text-sm text-zinc-600 leading-relaxed">The app saves an automatic copy every day in the <code class="font-mono text-[12px] bg-zinc-950/5 rounded-md px-1.5 py-0.5">data/backups</code> folder, and copies it to the off-site folder (Google Drive) if one is set.</p>
+          <template x-if="backupStatus">
+            <dl class="grid grid-cols-2 gap-y-1.5 text-sm">
+              <dt class="text-zinc-500">On this PC</dt>
+              <dd class="font-medium tabular-nums" x-text="backupStatus.last_local ? dmy(backupStatus.last_local) : 'None yet'"></dd>
+              <dt class="text-zinc-500">Off-site</dt>
+              <dd class="font-medium tabular-nums"
+                  :class="!backupStatus.offsite_dir || backupStatus.offsite_error || backupStatus.last_offsite !== backupStatus.last_local ? 'text-rose-600' : ''"
+                  x-text="!backupStatus.offsite_dir ? 'Not set up' : (backupStatus.last_offsite ? dmy(backupStatus.last_offsite) : 'None yet')"></dd>
+            </dl>
+          </template>
+          <p x-show="backupStatus && backupStatus.offsite_error" class="text-sm text-rose-700 rounded-xl bg-rose-50 ring-1 ring-inset ring-rose-200 px-3 py-2"
+             x-text="'Off-site copy failed: ' + (backupStatus && backupStatus.offsite_error) + '. Check that Google Drive is running on the PC.'"></p>
           <a href="/api/backup" class="btn-ghost w-full">Download backup</a>
         </div>
         </div>
@@ -747,6 +765,32 @@
     </template>
   </main>
   </div><!-- /content panel -->
+
+  <!-- ============ delete with reason ============ -->
+  <template x-if="del">
+    <div class="fixed inset-0 z-40 bg-zinc-950/30 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="del = null" @keydown.escape.window="del = null">
+      <form class="bg-white w-full sm:max-w-lg rounded-t-[28px] sm:rounded-3xl shadow-sheet sm:shadow-lift p-5 pt-3 sm:pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 max-h-[90vh] overflow-y-auto" @submit.prevent="confirmDelete()">
+        <div class="sm:hidden mx-auto w-10 h-1.5 rounded-full bg-zinc-300"></div>
+        <div>
+          <h3 class="text-lg font-semibold tracking-tight" x-text="'Delete this ' + TYPES[del.entry.entry_type].label + ' entry?'"></h3>
+          <p class="text-sm text-zinc-500 mt-1">Stock is worked out again without it. The entry and your reason stay in the history.</p>
+        </div>
+        <div>
+          <label class="lbl">Why?</label>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <template x-for="r in DELETE_REASONS" :key="r">
+              <button type="button" class="seg h-10" :class="del.reason === r ? 'seg-on' : ''" @click="del.reason = r" x-text="r"></button>
+            </template>
+          </div>
+          <input type="text" class="inp" x-model="del.reason" maxlength="200" autocomplete="off" placeholder="Or type the reason">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" class="btn-ghost" @click="del = null">Cancel</button>
+          <button type="submit" class="btn bg-rose-600 text-white hover:bg-rose-700" :disabled="busy" x-text="busy ? 'Deleting…' : 'Delete entry'"></button>
+        </div>
+      </form>
+    </div>
+  </template>
 
   <!-- ============ master edit sheet ============ -->
   <template x-if="medit">
@@ -788,14 +832,14 @@
         <template x-if="medit.kind === 'users'">
           <div class="space-y-4">
             <div>
-              <label class="lbl">Access</label>
-              <div class="grid grid-cols-2 gap-2">
-                <template x-for="r in [['EDITOR','Editor','Add, edit, delete'],['VIEWER','Viewer','Only look']]" :key="r[0]">
-                  <button type="button" @click="medit.data.role = r[0]" class="opt h-16"
-                          :class="medit.data.role === r[0] ? 'opt-on' : ''">
-                    <span class="block font-semibold" x-text="r[1]"></span>
-                    <span class="block text-xs font-normal opacity-70 mt-0.5" x-text="r[2]"></span>
-                  </button>
+              <label class="lbl">Can do <span class="font-normal text-zinc-500">(everyone can look at stock, ledger and reports)</span></label>
+              <div class="card divide-y divide-zinc-950/[.05]">
+                <template x-for="p in PERMS" :key="p[0]">
+                  <label class="tap flex items-start gap-3 px-4 py-3 cursor-pointer">
+                    <input type="checkbox" class="mt-0.5 w-6 h-6 shrink-0 accent-ink" x-model="medit.data[p[0]]">
+                    <span class="leading-snug"><b class="font-semibold" x-text="p[1]"></b><br>
+                      <span class="text-sm text-zinc-500" x-text="p[2]"></span></span>
+                  </label>
                 </template>
               </div>
             </div>

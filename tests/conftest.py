@@ -26,3 +26,8 @@ def login(name, password):
         r = c.post("/api/auth/login", json={"user_id": uid, "password": password})
     assert r.status_code == 200, r.text
     return c
+
+
+def rm(client, entry_id, reason="Test cleanup"):
+    """Delete an entry. Deleting needs a reason."""
+    return client.request("DELETE", f"/api/entries/{entry_id}", json={"reason": reason})

@@ -31,7 +31,15 @@ const ITEM_TYPES = { RAW: 'Raw', FG: 'Finished', SCRAP: 'Scrap' };
 const MASTER_TABS = [['materials', 'Materials', 'material'], ['shapes', 'Types', 'type'], ['grades', 'Grades', 'grade'],
   ['parties', 'Parties', 'party'], ['vendors', 'Vendors', 'vendor'], ['users', 'Users', 'user']];
 const ENDPOINT = { purchase: 'purchase', sale: 'sale', opening: 'opening', 'labour-out': 'labour-out', 'labour-in': 'labour-in' };
-const FIELD_NAMES = { qty: 'Quantity', material_id: 'Material', shape_id: 'Type', grade_id: 'Grade', size: 'Size',
+// What a user may do beyond looking. The owner ticks these per user (Masters → Users); the server enforces them.
+const PERMS = [
+  ['can_write', 'Add & edit entries', 'Purchase, labour, sale, opening stock. Edit entries. Add parties.'],
+  ['can_delete', 'Delete entries', 'Must give a reason, which is kept with the entry.'],
+  ['can_masters', 'Manage masters', 'Materials, types, grades and vendors.'],
+  ['is_owner', 'Owner', 'Users and their permissions. Backups.'],
+];
+const DELETE_REASONS = ['Entered twice', 'Wrong quantity', 'Wrong material or size', 'Wrong party or vendor', 'Entered by mistake'];
+const FIELD_NAMES = { reason: 'Reason',  qty: 'Quantity', material_id: 'Material', shape_id: 'Type', grade_id: 'Grade', size: 'Size',
   party_id: 'Party', vendor_id: 'Vendor', date: 'Date', lot_id: 'Challan', recv_qty: 'Received qty', scrap_qty: 'Scrap qty', name: 'Name', ref_no: 'Bill / invoice / challan no.',
   challan_no: 'Challan no.', remarks: 'Remarks', password: 'Password', hsn: 'HSN', phone: 'Phone', gstin: 'GSTIN', unit: 'Unit' };
 
@@ -88,7 +96,7 @@ async function api(method, url, body) {
 document.addEventListener('alpine:init', () => {
   stampSpecBlocks();
   Alpine.data('app', () => ({
-    TYPES, ITEM_TYPES, MASTER_TABS, NAV, REPORTS, BURN_WARN_PCT, num, dmy, sizeKey,
+    TYPES, ITEM_TYPES, MASTER_TABS, PERMS, DELETE_REASONS, NAV, REPORTS, BURN_WARN_PCT, num, dmy, sizeKey,
     ready: false,
     auth: { setup_needed: false, users: [], me: null }, login: { user_id: null, password: '', name: '', code: '' },
     meta: { items: [], materials: [], shapes: [], grades: [], parties: [], vendors: [], today: '' },
@@ -101,7 +109,9 @@ document.addEventListener('alpine:init', () => {
     // stock
     stock: { items: [], with_vendors: [] }, stockTab: 'RAW', stockQ: '', hideZero: true,
     // ledger
-    ledger: [], lf: { entry_type: '', date_from: '', date_to: '', q: '', item_id: null },
+    ledger: [], lf: { entry_type: '', date_from: '', date_to: '', q: '', item_id: null, include_deleted: false },
+    del: null,  // { entry, reason } while the delete sheet is open
+    backupStatus: null,
     entry: null,
     // masters
     mtab: 'materials', mq: '', medit: null, users: [],
@@ -127,7 +137,17 @@ document.addEventListener('alpine:init', () => {
       this.auth = await api('GET', '/api/auth/state');
       if (!this.auth.me && this.auth.users.length === 1) this.pickLogin(this.auth.users[0]);
     },
-    get canEdit() { return !!this.auth.me && this.auth.me.role === 'EDITOR'; },
+    can(p) { return !!this.auth.me && !!this.auth.me[p]; },
+    get canWrite() { return this.can('can_write'); },
+    get canDelete() { return this.can('can_delete'); },
+    get canMasters() { return this.can('can_masters'); },
+    get isOwner() { return this.can('is_owner'); },
+    roleLabel(u) {
+      if (!u) return '';
+      if (u.is_owner) return 'Owner';
+      const p = [u.can_write && 'Add & edit', u.can_delete && 'Delete', u.can_masters && 'Masters'].filter(Boolean);
+      return p.length ? p.join(' · ') : 'View only';
+    },
     pickLogin(u) { this.login = { user_id: u.id, name: u.name, password: '' }; this.$nextTick(() => { const el = document.getElementById('login-pw'); if (el) el.focus(); }); },
     async doLogin() {
       try {
@@ -161,8 +181,8 @@ document.addEventListener('alpine:init', () => {
       const parts = location.hash.replace(/^#\/?/, '').split('/');
       let r = parts[0] || 'home';
       this.param = parts[1] || null;
-      if (!this.canEdit && (r === 'edit' || ROUTE_TYPE[r])) r = 'home';  // viewers can't open entry forms
-      this.saved = null; this.sheet.open = false; this.editId = null; this.medit = null; this.toast = null;
+      if (!this.canWrite && (r === 'edit' || ROUTE_TYPE[r])) r = 'home';  // only writers open entry forms
+      this.saved = null; this.sheet.open = false; this.editId = null; this.medit = null; this.del = null; this.toast = null;
       window.scrollTo(0, 0);
       try {
         if (r === 'edit') {
@@ -185,12 +205,12 @@ document.addEventListener('alpine:init', () => {
         if (r === 'entry') this.entry = await api('GET', `/api/entries/${this.param}`);
         if (r === 'home') await this.loadHome();
         if (r === 'report') { this.rep.key = this.param; this.rep.data = null; if (!this.rep.from) this.setPeriod(this.periods()[2], false); await this.loadReport(); }
-        if (r === 'masters' && this.canEdit) await this.loadUsers();
-        if (r === 'masters' && !this.canEdit && this.mtab === 'users') this.mtab = 'materials';
+        if (r === 'masters' && this.isOwner) await Promise.all([this.loadUsers(), this.loadBackupStatus()]);
+        if (r === 'masters' && !this.isOwner && this.mtab === 'users') this.mtab = 'materials';
       } catch (e) { this.showError(e); }
       this.route = r;
     },
-    nav(n) { if (n[0] === 'ledger' && this.route !== 'ledger') this.lf = { entry_type: '', date_from: '', date_to: '', q: '', item_id: null }; this.go(n[1]); },
+    nav(n) { if (n[0] === 'ledger' && this.route !== 'ledger') this.lf = { entry_type: '', date_from: '', date_to: '', q: '', item_id: null, include_deleted: false }; this.go(n[1]); },
     navOn(n) { return this.route === n[0] || (n[0] === 'ledger' && this.route === 'entry') || (n[0] === 'reports' && this.route === 'report'); },
     get title() {
       const t = ROUTE_TYPE[this.route];
@@ -450,7 +470,7 @@ document.addEventListener('alpine:init', () => {
       return Object.entries(by).map(([name, lots]) => ({ name, lots, total: r3(lots.reduce((s, l) => s + l.pending, 0)) }));
     },
     get withVendorTotal() { return r3(this.stock.with_vendors.reduce((s, l) => s + l.pending, 0)); },
-    openItemLedger(i) { this.lf = { entry_type: '', date_from: '', date_to: '', q: '', item_id: i.id }; this.go('#/ledger'); },
+    openItemLedger(i) { this.lf = { entry_type: '', date_from: '', date_to: '', q: '', item_id: i.id, include_deleted: false }; this.go('#/ledger'); },
 
     // ------------------------------------------------ ledger
     async loadLedger() {
@@ -470,14 +490,18 @@ document.addEventListener('alpine:init', () => {
     who(e) { return e.party_name || e.vendor_name || ''; },
     lineText(l) { return `${l.qty > 0 ? '+' : '−'}${num(Math.abs(l.qty))} ${l.unit}`; },
     editEntry(e) { this.go(`#/edit/${e.id}`); },
-    async deleteEntry(e) {
-      if (!confirm(`Delete this ${TYPES[e.entry_type].label} entry? Stock will be recalculated.`)) return;
+    deleteEntry(e) { this.del = { entry: e, reason: '' }; },
+    async confirmDelete() {
+      const e = this.del.entry, reason = this.del.reason.trim();
       try {
-        await api('DELETE', `/api/entries/${e.id}`);
+        if (reason.length < 3) throw new Error('Pick or type why you are deleting this entry.');
+        this.busy = true;
+        await api('DELETE', `/api/entries/${e.id}`, { reason });
         await this.loadMeta();
+        this.del = null;
         this.notify('Entry deleted');
         history.length > 1 ? history.back() : this.go('#/ledger');
-      } catch (err) { this.showError(err); }
+      } catch (err) { this.showError(err); } finally { this.busy = false; }
     },
 
     // ------------------------------------------------ home
@@ -489,7 +513,13 @@ document.addEventListener('alpine:init', () => {
     get homeOld() { return this.homeLots.filter((l) => l.days_out >= AGING_WARN_DAYS).length; },
 
     // ------------------------------------------------ masters
-    get masterTabs() { return MASTER_TABS.filter((t) => t[0] !== 'users' || this.canEdit); },
+    get masterTabs() { return MASTER_TABS.filter((t) => t[0] !== 'users' || this.isOwner); },
+    canEditMaster(kind) {
+      if (kind === 'users') return this.isOwner;
+      if (kind === 'parties') return this.canWrite || this.canMasters;
+      return this.canMasters;
+    },
+    async loadBackupStatus() { this.backupStatus = await api('GET', '/api/backup/status'); },
     masterNoun(kind) { return (MASTER_TABS.find((t) => t[0] === kind) || [])[2] || ''; },
     get masterRows() {
       const q = this.mq.trim().toLowerCase();
@@ -504,8 +534,8 @@ document.addEventListener('alpine:init', () => {
       const blank = { materials: { name: '', is_scrap: false, active: true }, shapes: { name: '', active: true },
         grades: { name: '', material_id: null, active: true },
         parties: { name: '', gstin: '', phone: '', active: true }, vendors: { name: '', gstin: '', active: true },
-        users: { name: '', role: 'VIEWER', password: '', active: true } }[kind];
-      if (!this.canEdit) return;
+        users: { name: '', password: '', active: true, can_write: false, can_delete: false, can_masters: false, is_owner: false } }[kind];
+      if (!this.canEditMaster(kind)) return;
       this.medit = { kind, id: row ? row.id : null, data: { ...blank, ...(row || {}), ...(kind === 'users' ? { password: '' } : {}) } };
     },
     async loadUsers() { this.users = await api('GET', '/api/users'); },
