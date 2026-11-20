@@ -206,6 +206,11 @@ async def security_headers(request: Request, call_next):
     resp.headers.update(SECURITY_HEADERS)
     if request.url.path.startswith("/api/"):
         resp.headers["Cache-Control"] = "no-store"  # don't leave stock data in the browser cache
+    else:
+        # The app's own files: always ask the server if they changed (a cheap 304 when not), so after an
+        # update no browser runs an old app.js against the new index.html. Without this, browsers
+        # (Safari especially) guess how long to keep them.
+        resp.headers.setdefault("Cache-Control", "no-cache")
     return resp
 
 
@@ -1076,10 +1081,12 @@ class UserBody(BaseModel):
     name: str = NAME
     active: bool = True
     password: str = PField("", max_length=128)  # blank on edit = keep current password
-    can_write: bool = False
-    can_delete: bool = False
-    can_masters: bool = False
-    is_owner: bool = False
+    # Left out = keep what the user has (new users: not allowed). So a page from before an update,
+    # which doesn't know these boxes, can't untick them by saving a user.
+    can_write: Optional[bool] = None
+    can_delete: Optional[bool] = None
+    can_masters: Optional[bool] = None
+    is_owner: Optional[bool] = None
 
 
 def user_view(u: User) -> dict:
@@ -1193,7 +1200,8 @@ def _save_user(s: Session, u: User, b: UserBody, request: Request):
             bad(f"User '{dup.name}' already exists.")
         u.name, u.active = name, b.active
         for p in Perm.ALL:
-            setattr(u, p, getattr(b, p))
+            if getattr(b, p) is not None:
+                setattr(u, p, getattr(b, p))
         if b.password:
             u.pw_hash = hash_pw(b.password)
         s.add(u)

@@ -96,8 +96,14 @@ def test_login_and_permissions():
     assert viewer.get("/api/meta").status_code == 401
     assert "Ramesh" not in [u["name"] for u in anon.get("/api/auth/state").json()["users"]]
 
+    # an old page that doesn't send the checkboxes (e.g. renaming a user) leaves them as they are
+    meena = next(u for u in owner.get("/api/users").json() if u["name"] == "Meena")
+    owner.put(f"/api/users/{meena['id']}", json={"name": "Meena R", "role": "EDITOR"})
+    after = next(u for u in owner.get("/api/users").json() if u["id"] == meena["id"])
+    assert after["name"] == "Meena R" and after["can_masters"] and not after["can_write"]
+
     # can't remove the last owner
-    r = owner.put(f"/api/users/{me['id']}", json={"name": me["name"], "can_write": True})
+    r = owner.put(f"/api/users/{me['id']}", json={"name": me["name"], "is_owner": False})
     assert r.status_code == 400 and "at least one active owner" in r.json()["detail"]
 
     # logout ends the session
@@ -149,6 +155,9 @@ def test_hardening():
     r = anon.get("/")
     assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in r.headers["content-security-policy"]
     assert editor.get("/api/meta").headers["cache-control"] == "no-store"
+    # the app's own files are re-checked on every load, so an update is never half-applied in a browser
+    for path in ("/", "/app.js", "/app.css"):
+        assert anon.get(path).headers["cache-control"] == "no-cache", path
     # bad edit input is a friendly 422, not a crash
     party = editor.post("/api/parties", json={"name": "Hardening Party"}).json()["id"]
     scrap = next(m["id"] for m in editor.get("/api/meta").json()["materials"] if m["is_scrap"])
